@@ -17,6 +17,7 @@ export interface Config {
   includePrefixes: string[];
   excludePrefixes: string[];
   cursor: number;           // last seen seq from /api/sync
+  convenienceMode: boolean;  // when true, vault key derives from login password (no separate passphrase)
 }
 
 export const CONFIG_DIR = join(homedir(), '.claude-sync');
@@ -29,6 +30,7 @@ const DEFAULT: Config = {
   includePrefixes: ['skills/', 'commands/', 'agents/'],
   excludePrefixes: ['projects/', 'sessions/', 'cache/', 'shell-snapshots/', 'paste-cache/', 'file-history/'],
   cursor: 0,
+  convenienceMode: true,
 };
 
 export async function loadConfig(): Promise<Config> {

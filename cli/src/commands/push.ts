@@ -25,9 +25,16 @@ async function walk(root: string): Promise<string[]> {
 }
 
 function shouldSync(relPosix: string, includes: string[], excludes: string[]): boolean {
-  for (const ex of excludes) if (relPosix.startsWith(ex)) return false;
+  for (const ex of excludes) {
+    // Trailing-slash entries match a directory prefix; otherwise match the exact file or a prefix.
+    if (ex.endsWith('/') ? relPosix.startsWith(ex) : (relPosix === ex || relPosix.startsWith(ex + '/'))) return false;
+  }
   if (includes.length === 0) return true;
-  return includes.some((inc) => relPosix.startsWith(inc));
+  return includes.some((inc) => ex_is_match(relPosix, inc));
+}
+function ex_is_match(p: string, pattern: string): boolean {
+  if (pattern.endsWith('/')) return p.startsWith(pattern);
+  return p === pattern || p.startsWith(pattern + '/');
 }
 
 export async function push(opts: { passphrase?: string } = {}): Promise<void> {

@@ -7,7 +7,8 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { copyFileSync, existsSync, unlinkSync } from 'node:fs';
 
-const EMAIL = process.env.CLAUDE_SYNC_EMAIL ?? 'yelnil@gmail.com';
+const RUN_ID = Math.random().toString(36).slice(2, 8);
+const EMAIL = process.env.CLAUDE_SYNC_EMAIL ?? `e2e+${RUN_ID}@example.com`;
 const PASSWORD = process.env.CLAUDE_SYNC_PASSWORD ?? 'first-test-passphrase-1234';
 const PASSPHRASE = process.env.CLAUDE_SYNC_PASSPHRASE ?? 'vault-test-passphrase-1234';
 
@@ -25,7 +26,7 @@ function restore() {
 async function run() {
   preserve();
   try {
-    // Start with no session â€” force login flow
+    // Start with no session ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â force login flow
     if (existsSync(CONFIG)) unlinkSync(CONFIG);
 
     console.log('Launching Electron...');
@@ -34,6 +35,8 @@ async function run() {
       cwd: new URL('..', import.meta.url).pathname.replace(/^\//, ''),
       timeout: 30_000,
     });
+    app.process().stdout?.on('data', (d) => process.stdout.write('[main stdout] ' + d.toString()));
+    app.process().stderr?.on('data', (d) => process.stdout.write('[main stderr] ' + d.toString()));
 
     const win = await app.firstWindow({ timeout: 15_000 });
     win.on('console', (msg) => console.log('[renderer ' + msg.type() + ']', msg.text()));
@@ -53,34 +56,18 @@ async function run() {
     await win.waitForSelector('#auth-section:not([hidden])', { timeout: 5_000 });
     console.log('Login form visible.');
 
-    // 2. Submit login
+    // 2. Sign up a fresh user (convenience mode auto-registers device + creates vault)
     await win.fill('#email', EMAIL);
     await win.fill('#password', PASSWORD);
     await Promise.all([
-      win.click('#login-btn'),
-      win.waitForSelector('#device-section:not([hidden]), #vault-section:not([hidden]), #sync-section:not([hidden])', { timeout: 15_000 }),
+      win.click('#signup-btn'),
+      win.waitForSelector('#sync-section:not([hidden])', { timeout: 30_000 }),
     ]);
-    console.log('Login posted.');
+    console.log('Signed up: ' + EMAIL);
 
-    // 3. If we landed on device-section, register a device.
-    if (await win.locator('#device-section:not([hidden])').count() > 0) {
-      await win.fill('#device-name', 'e2e-test-device');
-      await Promise.all([
-        win.click('#device-form button[type=submit]'),
-        win.waitForSelector('#vault-section:not([hidden]), #sync-section:not([hidden])', { timeout: 15_000 }),
-      ]);
-      console.log('Device registered.');
-    }
-
-    // 4. Vault: unlock (vault metadata already on server from earlier CLI test).
-    if (await win.locator('#vault-section:not([hidden])').count() > 0) {
-      await win.fill('#vault-passphrase', PASSPHRASE);
-      await Promise.all([
-        win.click('#vault-form button[type=submit]'),
-        win.waitForSelector('#sync-section:not([hidden])', { timeout: 30_000 }),
-      ]);
-      console.log('Vault unlocked.');
-    }
+    // 4. Vault: in convenience mode the auth handler auto-unlocks. Just wait for sync section.
+    await win.waitForSelector('#sync-section:not([hidden])', { timeout: 30_000 });
+    console.log('Sync section visible (convenience mode auto-unlocked vault).');
 
     // 5. Sync section should be visible and showing the file list.
     await win.waitForSelector('#sync-section:not([hidden])');

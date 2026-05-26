@@ -21,8 +21,8 @@ async function refresh() {
   catch (e) { setStatus('error', 'err'); return; }
 
   show(authSection, !st.loggedIn);
-  show(deviceSection, st.loggedIn && !st.deviceId);
-  show(vaultSection, st.loggedIn && st.deviceId && !st.unlocked);
+  show(deviceSection, st.loggedIn && !st.deviceId && !st.convenienceMode);
+  show(vaultSection, st.loggedIn && st.deviceId && !st.unlocked && !st.convenienceMode);
   show(syncSection, st.unlocked);
   show(settingsSection, st.unlocked);
 
@@ -77,7 +77,7 @@ function renderFiles(files) {
     el.className = 'file' + (f.deleted ? ' deleted' : '');
     const path = f.path ?? f.file_id;
     el.innerHTML = `<span class="path" title="${escapeHtml(path)}">${escapeHtml(path)}</span>` +
-                   `<span class="meta">${f.size_bytes} B Â· seq ${f.latest_seq}</span>`;
+                   `<span class="meta">${f.size_bytes} B Ã‚Â· seq ${f.latest_seq}</span>`;
     list.appendChild(el);
   }
 }
@@ -92,11 +92,13 @@ async function refreshSettings() {
   $('server-url').textContent = s.serverUrl;
   $('include-prefixes').textContent = (s.includePrefixes || []).join(', ') || '(all)';
   $('exclude-prefixes').textContent = (s.excludePrefixes || []).join(', ') || '(none)';
+  const cm = document.getElementById('convenience-mode');
+  if (cm) cm.checked = !!s.convenienceMode;
 }
 
 function updateSyncStatus(st) {
   const line = $('sync-status');
-  if (st.syncing) line.textContent = 'Sync in progressâ€¦';
+  if (st.syncing) line.textContent = 'Sync in progressÃ¢â‚¬Â¦';
   else if (st.lastSyncAt) line.textContent = `Last synced at ${new Date(st.lastSyncAt).toLocaleTimeString()}`;
   else line.textContent = 'Idle (next sync within 15s).';
   const errEl = $('sync-err');
@@ -190,3 +192,10 @@ claudeSync.onSyncState(() => refresh());
 
 refresh();
 setInterval(refresh, 5000);
+// Settings: convenience mode toggle
+document.addEventListener('change', async (ev) => {
+  if (ev.target && ev.target.id === 'convenience-mode') {
+    await claudeSync.setSettings({ convenienceMode: ev.target.checked });
+    await refresh();
+  }
+});
