@@ -33,7 +33,13 @@ export interface GithubAuthDeps {
 
 export function registerGithubAuth(app: FastifyInstance, deps: GithubAuthDeps): void {
   const { db, env } = deps;
-  const exchange = deps.exchangeCodeForToken ?? defaultExchange(env);
+  // Caller (index.ts) only invokes this when both env vars are set; narrow here.
+  if (!env.GITHUB_CLIENT_ID || !env.GITHUB_CLIENT_SECRET) {
+    throw new Error('registerGithubAuth requires GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET');
+  }
+  const githubClientId = env.GITHUB_CLIENT_ID;
+  const githubClientSecret = env.GITHUB_CLIENT_SECRET;
+  const exchange = deps.exchangeCodeForToken ?? defaultExchange(githubClientId, githubClientSecret, env.AUTH_URL);
   const fetchUser = deps.fetchGitHubUser ?? defaultFetchUser;
 
   app.get('/auth/github', async (req, reply) => {
@@ -50,7 +56,7 @@ export function registerGithubAuth(app: FastifyInstance, deps: GithubAuthDeps): 
     });
 
     const url = new URL('https://github.com/login/oauth/authorize');
-    url.searchParams.set('client_id', env.GITHUB_CLIENT_ID);
+    url.searchParams.set('client_id', githubClientId);
     url.searchParams.set('redirect_uri', `${env.AUTH_URL}/auth/github/callback`);
     url.searchParams.set('scope', 'read:user user:email');
     url.searchParams.set('state', state);
@@ -115,16 +121,16 @@ async function upsertUser(db: DbClient, githubId: number, email: string | null):
   return got.rows[0].id;
 }
 
-function defaultExchange(env: Env): (code: string) => Promise<string> {
+function defaultExchange(clientId: string, clientSecret: string, authUrl: string): (code: string) => Promise<string> {
   return async (code) => {
     const res = await fetch('https://github.com/login/oauth/access_token', {
       method: 'POST',
       headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        client_id: env.GITHUB_CLIENT_ID,
-        client_secret: env.GITHUB_CLIENT_SECRET,
+        client_id: clientId,
+        client_secret: clientSecret,
         code,
-        redirect_uri: `${env.AUTH_URL}/auth/github/callback`,
+        redirect_uri: `${authUrl}/auth/github/callback`,
       }),
     });
     const json = (await res.json()) as { access_token?: string; error?: string };
