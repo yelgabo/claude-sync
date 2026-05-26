@@ -20,7 +20,7 @@ COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/package.json /app/pnpm-workspace.yaml ./
 COPY --from=build /app/server/node_modules ./server/node_modules
 COPY --from=build /app/server/dist ./server/dist
-COPY --from=build /app/server/src/db/migrations ./server/src/db/migrations
+COPY --from=build /app/server/src/db/migrations ./server/dist/db/migrations
 COPY --from=build /app/server/package.json ./server/package.json
 EXPOSE 8080
 WORKDIR /app/server
