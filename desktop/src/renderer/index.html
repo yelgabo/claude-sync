@@ -9,11 +9,11 @@
 <body>
   <header>
     <h1>Claude Sync</h1>
-    <div id="status-pill" class="pill">â€¦</div>
+    <div id="status-pill" class="pill">…</div>
   </header>
 
   <main>
-    <!-- Login / signup -->
+    <!-- AUTH gate -->
     <section id="auth-section" class="card" hidden>
       <h2>Sign in</h2>
       <form id="auth-form">
@@ -23,12 +23,12 @@
           <button type="submit" id="login-btn">Log in</button>
           <button type="button" id="signup-btn">Sign up</button>
         </div>
-        <p class="hint">Password must be at least 12 characters.</p>
+        <p class="hint">Password must be at least 12 characters. Convenience mode (on by default) uses this password to derive your vault key — no separate passphrase needed.</p>
         <p class="err" id="auth-err"></p>
       </form>
     </section>
 
-    <!-- Device + vault -->
+    <!-- (legacy fallback) device + vault sections — shown only when convenience mode is OFF -->
     <section id="device-section" class="card" hidden>
       <h2>Register this device</h2>
       <form id="device-form">
@@ -43,38 +43,86 @@
       <p id="vault-help" class="hint"></p>
       <form id="vault-form">
         <label>Vault passphrase <input type="password" id="vault-passphrase" required minlength="12" /></label>
-        <label class="checkbox"><input type="checkbox" id="vault-remember" /> Remember on this device (encrypted in Windows DPAPI)</label>
+        <label class="checkbox"><input type="checkbox" id="vault-remember" /> Remember on this device (Windows DPAPI)</label>
         <button type="submit" id="vault-btn">Unlock</button>
-        <p class="hint">Vault passphrase is different from your login password. It is never sent to the server.</p>
         <p class="err" id="vault-err"></p>
       </form>
     </section>
 
-    <!-- Sync status + file list -->
-    <section id="sync-section" class="card" hidden>
-      <div class="row spread">
-        <h2>Synced</h2>
-        <div class="row">
-          <button id="sync-now-btn">Sync now</button>
-          <button id="vault-lock-btn" class="secondary">Lock</button>
-          <button id="logout-btn" class="secondary">Log out</button>
+    <!-- MAIN: tabbed UI -->
+    <div id="app-shell" hidden>
+      <nav class="tabs">
+        <button class="tab active" data-tab="files">Files</button>
+        <button class="tab" data-tab="activity">Activity</button>
+        <button class="tab" data-tab="devices">Devices</button>
+        <button class="tab" data-tab="settings">Settings</button>
+        <div class="tab-spacer"></div>
+        <button id="sync-now-btn" class="secondary small">Sync now</button>
+        <button id="pause-btn" class="secondary small">Pause</button>
+        <button id="logout-btn" class="secondary small">Log out</button>
+      </nav>
+      <p id="sync-status" class="hint inline"></p>
+      <p id="sync-err" class="err inline" hidden></p>
+
+      <!-- FILES TAB -->
+      <section class="tab-pane active" data-tab-pane="files">
+        <div class="row spread">
+          <h3>Files on server <span id="file-count" class="muted"></span></h3>
+          <input type="search" id="file-filter" placeholder="filter…" class="filter" />
         </div>
-      </div>
-      <p id="sync-status" class="hint">â€¦</p>
-      <p id="sync-err" class="err" hidden></p>
+        <div id="file-tree" class="tree">Loading…</div>
 
-      <h3>Files on server <span id="file-count" class="muted"></span></h3>
-      <div class="list" id="file-list">Loadingâ€¦</div>
-    </section>
+        <!-- Version history drawer -->
+        <div id="versions-drawer" class="drawer" hidden>
+          <div class="row spread">
+            <h3>Versions of <code id="versions-file"></code></h3>
+            <button id="versions-close" class="secondary small">×</button>
+          </div>
+          <div id="versions-list" class="versions">Loading…</div>
+        </div>
+      </section>
 
-    <!-- Settings -->
-    <section id="settings-section" class="card" hidden>
-      <h2>Settings</h2>
-      <p class="hint">Sync root: <code id="sync-root"></code></p>
-      <p class="hint">Server: <code id="server-url"></code></p>
-      <p class="hint">Include prefixes: <code id="include-prefixes"></code></p>
-      <p class="hint">Exclude prefixes: <code id="exclude-prefixes"></code></p>
-    </section>
+      <!-- ACTIVITY TAB -->
+      <section class="tab-pane" data-tab-pane="activity" hidden>
+        <h3>Recent activity</h3>
+        <div id="activity-list" class="activity">Loading…</div>
+      </section>
+
+      <!-- DEVICES TAB -->
+      <section class="tab-pane" data-tab-pane="devices" hidden>
+        <h3>Devices</h3>
+        <div id="device-list" class="devices">Loading…</div>
+      </section>
+
+      <!-- SETTINGS TAB -->
+      <section class="tab-pane" data-tab-pane="settings" hidden>
+        <h3>Sync</h3>
+        <label class="checkbox"><input type="checkbox" id="convenience-mode" /> Convenience mode — use login password as vault key (no separate passphrase)</label>
+
+        <div class="row spread">
+          <span>Sync interval</span>
+          <span><input type="number" id="sync-interval" min="5" max="3600" step="5" value="15" /> seconds</span>
+        </div>
+
+        <h4>Include prefixes</h4>
+        <div id="includes-list" class="chip-list"></div>
+        <div class="row">
+          <input type="text" id="includes-add" placeholder="e.g., skills/" />
+          <button id="includes-add-btn" class="secondary small">Add</button>
+        </div>
+
+        <h4>Exclude prefixes</h4>
+        <div id="excludes-list" class="chip-list"></div>
+        <div class="row">
+          <input type="text" id="excludes-add" placeholder="e.g., cache/" />
+          <button id="excludes-add-btn" class="secondary small">Add</button>
+        </div>
+
+        <h4>Read-only</h4>
+        <p class="hint">Sync root: <code id="sync-root"></code></p>
+        <p class="hint">Server: <code id="server-url"></code></p>
+      </section>
+    </div>
   </main>
 
   <script src="app.js" defer></script>

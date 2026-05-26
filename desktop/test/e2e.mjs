@@ -26,7 +26,7 @@ function restore() {
 async function run() {
   preserve();
   try {
-    // Start with no session ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â force login flow
+    // Start with no session ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â force login flow
     if (existsSync(CONFIG)) unlinkSync(CONFIG);
 
     console.log('Launching Electron...');
@@ -61,32 +61,33 @@ async function run() {
     await win.fill('#password', PASSWORD);
     await Promise.all([
       win.click('#signup-btn'),
-      win.waitForSelector('#sync-section:not([hidden])', { timeout: 30_000 }),
+      win.waitForSelector('#app-shell:not([hidden])', { timeout: 30_000 }),
     ]);
     console.log('Signed up: ' + EMAIL);
 
     // 4. Vault: in convenience mode the auth handler auto-unlocks. Just wait for sync section.
-    await win.waitForSelector('#sync-section:not([hidden])', { timeout: 30_000 });
+    await win.waitForSelector('#app-shell:not([hidden])', { timeout: 30_000 });
     console.log('Sync section visible (convenience mode auto-unlocked vault).');
 
     // 5. Sync section should be visible and showing the file list.
-    await win.waitForSelector('#sync-section:not([hidden])');
+    await win.waitForSelector('#app-shell:not([hidden])');
     // Wait for file list to populate (sync runs immediately on unlock).
     await win.waitForFunction(() => {
-      const el = document.getElementById('file-list');
+      const el = document.getElementById('file-tree');
       return el && el.textContent && el.textContent.length > 0 && !el.textContent.includes('Loading');
     }, null, { timeout: 30_000 });
-    const fileListText = await win.textContent('#file-list');
+    const fileListText = await win.textContent('#file-tree');
     const fileCount = await win.textContent('#file-count');
     console.log('File list rendered:');
     console.log('  count: ' + (fileCount ?? '(empty)'));
     console.log('  preview: ' + (fileListText ?? '').slice(0, 200));
 
-    // 6. Verify settings panel shows synced config
-    await win.waitForSelector('#settings-section:not([hidden])');
+    // 6. Verify settings tab shows synced config
+    await win.click('button.tab[data-tab=settings]');
+    await win.waitForTimeout(500);
     const syncRoot = await win.textContent('#sync-root');
     const serverUrl = await win.textContent('#server-url');
-    const include = await win.textContent('#include-prefixes');
+    const include = await win.textContent('#includes-list');
     console.log('Settings:');
     console.log('  sync root:    ' + syncRoot);
     console.log('  server:       ' + serverUrl);
