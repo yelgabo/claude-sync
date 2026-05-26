@@ -1,0 +1,23 @@
+﻿# syntax=docker/dockerfile:1.7
+FROM node:20-alpine AS deps
+RUN corepack enable && corepack prepare pnpm@11.3.0 --activate
+WORKDIR /app
+COPY pnpm-workspace.yaml package.json ./
+COPY server/package.json ./server/
+RUN pnpm install --frozen-lockfile --filter @claude-sync/server || pnpm install --filter @claude-sync/server
+
+FROM deps AS build
+COPY server ./server
+RUN pnpm -F @claude-sync/server build
+
+FROM node:20-alpine AS runtime
+ENV NODE_ENV=production
+WORKDIR /app
+RUN corepack enable && corepack prepare pnpm@11.3.0 --activate
+COPY --from=build /app/server/dist ./server/dist
+COPY --from=build /app/server/src/db/migrations ./server/src/db/migrations
+COPY --from=build /app/server/package.json ./server/package.json
+COPY --from=build /app/server/node_modules ./server/node_modules
+EXPOSE 8080
+WORKDIR /app/server
+CMD ["node", "dist/index.js"]
