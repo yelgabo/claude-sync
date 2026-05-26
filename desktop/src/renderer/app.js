@@ -60,7 +60,7 @@ async function refresh() {
 function updateSyncStatus(st) {
   const line = $('sync-status');
   if (st.paused) line.textContent = 'Sync paused.';
-  else if (st.syncing) line.textContent = 'Sync in progress…';
+  else if (st.syncing) line.textContent = 'Sync in progressâ€¦';
   else if (st.lastSyncAt) line.textContent = `Last synced at ${new Date(st.lastSyncAt).toLocaleTimeString()}`;
   else line.textContent = 'Idle.';
   const errEl = $('sync-err');
@@ -118,7 +118,7 @@ function renderFiles() {
     el.title = 'Click for version history';
     const path = f.path ?? f.file_id;
     el.innerHTML = `<span class="path">${escapeHtml(path)}</span>` +
-                   `<span class="meta">${f.size_bytes} B · seq ${f.latest_seq}</span>`;
+                   `<span class="meta">${f.size_bytes} B Â· seq ${f.latest_seq}</span>`;
     el.addEventListener('click', () => openVersionsDrawer(f));
     tree.appendChild(el);
   }
@@ -132,7 +132,7 @@ async function openVersionsDrawer(file) {
   drawer.hidden = false;
   $('versions-file').textContent = file.path ?? file.file_id;
   const list = $('versions-list');
-  list.textContent = 'Loading…';
+  list.textContent = 'Loadingâ€¦';
   try {
     const data = await claudeSync.listVersions(file.file_id);
     list.innerHTML = '';
@@ -141,17 +141,17 @@ async function openVersionsDrawer(file) {
       div.className = 'ver';
       const when = new Date(v.uploaded_at).toLocaleString();
       const tomb = v.deleted ? ' <span class="tombstone">(tombstone)</span>' : '';
-      div.innerHTML = `<span class="label">seq ${v.seq} · ${v.size_bytes} B · ${when}${tomb}</span>`;
+      div.innerHTML = `<span class="label">seq ${v.seq} Â· ${v.size_bytes} B Â· ${when}${tomb}</span>`;
       if (!v.deleted) {
         const btn = document.createElement('button');
         btn.className = 'secondary small';
         btn.textContent = 'Restore';
         btn.addEventListener('click', async () => {
           if (!confirm(`Restore version ${v.seq}?`)) return;
-          btn.disabled = true; btn.textContent = '…';
+          btn.disabled = true; btn.textContent = 'â€¦';
           try {
             await claudeSync.restoreVersion(file.file_id, v.id);
-            alert('Restored — new version uploaded.');
+            alert('Restored â€” new version uploaded.');
             await refresh();
           } catch (e) { alert(`Restore failed: ${e.message}`); btn.disabled = false; btn.textContent = 'Restore'; }
         });
@@ -178,10 +178,10 @@ async function refreshActivity() {
     for (const c of data.changes) {
       const div = document.createElement('div');
       div.className = 'row-act';
-      const arrow = c.deleted ? '✗' : '↑';
+      const arrow = c.deleted ? 'âœ—' : 'â†‘';
       div.innerHTML = `<span class="arrow ${c.deleted ? 'deleted' : ''}">${arrow}</span>` +
                       `<span class="path">${escapeHtml(c.path ?? c.file_id)}</span>` +
-                      `<span class="size">seq ${c.seq}${c.deleted ? '' : ' · ' + c.size_bytes + ' B'}</span>`;
+                      `<span class="size">seq ${c.seq}${c.deleted ? '' : ' Â· ' + c.size_bytes + ' B'}</span>`;
       list.appendChild(div);
     }
   } catch (e) {
@@ -249,7 +249,7 @@ function renderChipList(containerId, items, settingKey) {
   for (const it of items) {
     const chip = document.createElement('span');
     chip.className = 'chip';
-    chip.innerHTML = `${escapeHtml(it)} <button title="remove">×</button>`;
+    chip.innerHTML = `${escapeHtml(it)} <button title="remove">Ã—</button>`;
     chip.querySelector('button').addEventListener('click', async () => {
       const cur = (await claudeSync.getSettings())[settingKey] || [];
       const next = cur.filter((x) => x !== it);
