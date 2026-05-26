@@ -1,10 +1,10 @@
-﻿# syntax=docker/dockerfile:1.7
+# syntax=docker/dockerfile:1.7
 FROM node:22-alpine AS deps
 RUN corepack enable && corepack prepare pnpm@11.3.0 --activate
 WORKDIR /app
-COPY pnpm-workspace.yaml package.json ./
+COPY pnpm-workspace.yaml package.json pnpm-lock.yaml ./
 COPY server/package.json ./server/
-RUN pnpm install --frozen-lockfile --filter @claude-sync/server || pnpm install --filter @claude-sync/server
+RUN pnpm install --frozen-lockfile --filter @claude-sync/server
 
 FROM deps AS build
 COPY server ./server
