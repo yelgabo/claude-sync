@@ -27,8 +27,23 @@ const MANIFEST_PATH = join(CONFIG_DIR, 'manifest.json');
 const DEFAULT: Config = {
   serverUrl: process.env['CLAUDE_SYNC_SERVER'] ?? 'https://claude-sync-production.up.railway.app',
   syncRoot: join(homedir(), '.claude'),
-  includePrefixes: ['skills/', 'commands/', 'agents/'],
-  excludePrefixes: ['projects/', 'sessions/', 'cache/', 'shell-snapshots/', 'paste-cache/', 'file-history/'],
+  includePrefixes: [
+    'skills/', 'commands/', 'agents/', 'memory/', 'settings.json',
+    // Plugins: only the small metadata files (which plugins are installed, which
+    // marketplaces are configured, plugin-specific data). The actual plugin bodies
+    // and marketplace clones live in plugins/cache and plugins/marketplaces — those
+    // rebuild from URLs on demand on each machine.
+    'plugins/installed_plugins.json', 'plugins/known_marketplaces.json', 'plugins/data/',
+  ],
+  excludePrefixes: [
+    'projects/', 'sessions/', 'session-data/', 'cache/', 'shell-snapshots/',
+    'paste-cache/', 'file-history/', 'backups/', 'telemetry/', 'metrics/',
+    'ide/', 'downloads/', 'tasks/', 'session-env/',
+    'plugins/cache/', 'plugins/marketplaces/', 'plugins/plugin-catalog-cache.json',
+    'settings.local.json', '.credentials.json',
+    'bash-commands.log', 'cost-tracker.log', 'history.jsonl',
+    'mcp-health-cache.json', '.last-cleanup',
+  ],
   cursor: 0,
   convenienceMode: true,
 };
