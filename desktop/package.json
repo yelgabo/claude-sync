@@ -2,23 +2,82 @@
     "name":  "@claude-sync/desktop",
     "version":  "0.0.1",
     "private":  true,
+    "type":  "module",
     "main":  "dist/main/index.js",
+    "scripts":  {
+                    "build":  "tsc -p tsconfig.json \u0026\u0026 node copy-renderer.cjs",
+                    "start":  "electron .",
+                    "dev":  "pnpm build \u0026\u0026 electron .",
+                    "typecheck":  "tsc -p tsconfig.json --noEmit",
+                    "test:e2e":  "node test/e2e.mjs",
+                    "dist":  "pnpm build \u0026\u0026 electron-builder",
+                    "dist:win":  "pnpm build \u0026\u0026 electron-builder --win",
+                    "dist:mac":  "pnpm build \u0026\u0026 electron-builder --mac"
+                },
     "dependencies":  {
-                         "@claude-sync/cli":  "workspace:*"
+                         "@claude-sync/cli":  "workspace:*",
+                         "electron-updater":  "^6.3.9"
                      },
     "devDependencies":  {
                             "@types/node":  "^22.10.0",
                             "electron":  "^33.2.1",
-                            "typescript":  "^5.7.2",
-                            "playwright":  "^1.49.0"
+                            "electron-builder":  "^25.1.8",
+                            "playwright":  "^1.49.0",
+                            "typescript":  "^5.7.2"
                         },
-    "type":  "module",
-    "scripts":  {
-                    "build":  "tsc -p tsconfig.json \u0026\u0026 node copy-renderer.cjs",
-                    "build:watch":  "tsc -p tsconfig.json --watch",
-                    "start":  "electron .",
-                    "dev":  "tsc -p tsconfig.json \u0026\u0026 electron .",
-                    "typecheck":  "tsc -p tsconfig.json --noEmit",
-                    "test:e2e":  "node test/e2e.mjs"
-                }
+    "build":  {
+                  "appId":  "app.claudesync",
+                  "productName":  "Claude Sync",
+                  "artifactName":  "claude-sync-${version}-${platform}-${arch}.${ext}",
+                  "files":  [
+                                "dist/**/*",
+                                "package.json"
+                            ],
+                  "directories":  {
+                                      "output":  "dist-installer"
+                                  },
+                  "win":  {
+                              "target":  [
+                                             {
+                                                 "target":  "nsis",
+                                                 "arch":  [
+                                                              "x64"
+                                                          ]
+                                             },
+                                             {
+                                                 "target":  "portable",
+                                                 "arch":  [
+                                                              "x64"
+                                                          ]
+                                             }
+                                         ],
+                              "icon":  "../assets/icon-256.png"
+                          },
+                  "mac":  {
+                              "target":  [
+                                             {
+                                                 "target":  "dmg",
+                                                 "arch":  [
+                                                              "x64",
+                                                              "arm64"
+                                                          ]
+                                             }
+                                         ],
+                              "category":  "public.app-category.developer-tools"
+                          },
+                  "nsis":  {
+                               "oneClick":  false,
+                               "perMachine":  false,
+                               "allowToChangeInstallationDirectory":  true,
+                               "deleteAppDataOnUninstall":  false
+                           },
+                  "publish":  [
+                                  {
+                                      "provider":  "github",
+                                      "owner":  "yelnil",
+                                      "repo":  "claude-sync",
+                                      "releaseType":  "release"
+                                  }
+                              ]
+              }
 }
