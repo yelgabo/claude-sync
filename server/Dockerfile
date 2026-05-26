@@ -4,7 +4,7 @@ RUN corepack enable && corepack prepare pnpm@11.3.0 --activate
 WORKDIR /app
 COPY pnpm-workspace.yaml package.json pnpm-lock.yaml ./
 COPY server/package.json ./server/
-RUN pnpm install --frozen-lockfile --filter @claude-sync/server
+RUN pnpm install --frozen-lockfile --filter @claude-sync/server --ignore-scripts
 
 FROM deps AS build
 COPY server ./server
