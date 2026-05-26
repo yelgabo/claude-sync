@@ -1,0 +1,36 @@
+{
+    "name":  "@claude-sync/cli",
+    "version":  "0.0.1",
+    "private":  true,
+    "type":  "module",
+    "bin":  {
+                "claude-sync":  "dist/index.js"
+            },
+    "scripts":  {
+                    "build":  "tsc -p tsconfig.json",
+                    "dev":  "tsx src/index.ts",
+                    "typecheck":  "tsc -p tsconfig.json --noEmit",
+                    "start":  "node dist/index.js"
+                },
+    "dependencies":  {
+                         "libsodium-wrappers":  "^0.7.15",
+                         "uuid":  "^11.0.3",
+                         "libsodium-wrappers-sumo":  "^0.7.15"
+                     },
+    "devDependencies":  {
+                            "@types/libsodium-wrappers":  "^0.7.14",
+                            "@types/node":  "^22.10.0",
+                            "@types/uuid":  "^10.0.0",
+                            "tsx":  "^4.19.2",
+                            "typescript":  "^5.7.2",
+                            "@types/libsodium-wrappers-sumo":  "^0.7.8"
+                        },
+    "main":  "dist/lib.js",
+    "types":  "dist/lib.d.ts",
+    "exports":  {
+                    ".":  {
+                              "import":  "./dist/lib.js",
+                              "types":  "./dist/lib.d.ts"
+                          }
+                }
+}

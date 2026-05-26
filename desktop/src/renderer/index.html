@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'" />
+  <title>Claude Sync</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header>
+    <h1>Claude Sync</h1>
+    <div id="status-pill" class="pill">…</div>
+  </header>
+
+  <main>
+    <!-- Login / signup -->
+    <section id="auth-section" class="card" hidden>
+      <h2>Sign in</h2>
+      <form id="auth-form">
+        <label>Email <input type="email" id="email" autocomplete="email" required /></label>
+        <label>Password <input type="password" id="password" autocomplete="current-password" required minlength="12" /></label>
+        <div class="row">
+          <button type="submit" id="login-btn">Log in</button>
+          <button type="button" id="signup-btn">Sign up</button>
+        </div>
+        <p class="hint">Password must be at least 12 characters.</p>
+        <p class="err" id="auth-err"></p>
+      </form>
+    </section>
+
+    <!-- Device + vault -->
+    <section id="device-section" class="card" hidden>
+      <h2>Register this device</h2>
+      <form id="device-form">
+        <label>Device name <input type="text" id="device-name" required /></label>
+        <button type="submit">Register</button>
+        <p class="err" id="device-err"></p>
+      </form>
+    </section>
+
+    <section id="vault-section" class="card" hidden>
+      <h2 id="vault-title">Unlock vault</h2>
+      <p id="vault-help" class="hint"></p>
+      <form id="vault-form">
+        <label>Vault passphrase <input type="password" id="vault-passphrase" required minlength="12" /></label>
+        <label class="checkbox"><input type="checkbox" id="vault-remember" /> Remember on this device (encrypted in Windows DPAPI)</label>
+        <button type="submit" id="vault-btn">Unlock</button>
+        <p class="hint">Vault passphrase is different from your login password. It is never sent to the server.</p>
+        <p class="err" id="vault-err"></p>
+      </form>
+    </section>
+
+    <!-- Sync status + file list -->
+    <section id="sync-section" class="card" hidden>
+      <div class="row spread">
+        <h2>Synced</h2>
+        <div class="row">
+          <button id="sync-now-btn">Sync now</button>
+          <button id="vault-lock-btn" class="secondary">Lock</button>
+          <button id="logout-btn" class="secondary">Log out</button>
+        </div>
+      </div>
+      <p id="sync-status" class="hint">…</p>
+      <p id="sync-err" class="err" hidden></p>
+
+      <h3>Files on server <span id="file-count" class="muted"></span></h3>
+      <div class="list" id="file-list">Loading…</div>
+    </section>
+
+    <!-- Settings -->
+    <section id="settings-section" class="card" hidden>
+      <h2>Settings</h2>
+      <p class="hint">Sync root: <code id="sync-root"></code></p>
+      <p class="hint">Server: <code id="server-url"></code></p>
+      <p class="hint">Include prefixes: <code id="include-prefixes"></code></p>
+      <p class="hint">Exclude prefixes: <code id="exclude-prefixes"></code></p>
+    </section>
+  </main>
+
+  <script src="app.js" defer></script>
+</body>
+</html>

@@ -1,0 +1,24 @@
+{
+    "name":  "@claude-sync/desktop",
+    "version":  "0.0.1",
+    "private":  true,
+    "main":  "dist/main/index.js",
+    "dependencies":  {
+                         "@claude-sync/cli":  "workspace:*"
+                     },
+    "devDependencies":  {
+                            "@types/node":  "^22.10.0",
+                            "electron":  "^33.2.1",
+                            "typescript":  "^5.7.2",
+                            "playwright":  "^1.49.0"
+                        },
+    "type":  "module",
+    "scripts":  {
+                    "build":  "tsc -p tsconfig.json \u0026\u0026 node copy-renderer.cjs",
+                    "build:watch":  "tsc -p tsconfig.json --watch",
+                    "start":  "electron .",
+                    "dev":  "tsc -p tsconfig.json \u0026\u0026 electron .",
+                    "typecheck":  "tsc -p tsconfig.json --noEmit",
+                    "test:e2e":  "node test/e2e.mjs"
+                }
+}

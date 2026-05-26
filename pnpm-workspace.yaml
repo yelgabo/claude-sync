@@ -1,4 +1,10 @@
 packages:
   - "server"
+  - "cli"
+  - "desktop"
+allowBuilds:
+  electron: true
+  esbuild: true
 onlyBuiltDependencies:
   - esbuild
+  - electron
