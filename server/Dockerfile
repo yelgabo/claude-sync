@@ -1,5 +1,5 @@
 ﻿# syntax=docker/dockerfile:1.7
-FROM node:20-alpine AS deps
+FROM node:22-alpine AS deps
 RUN corepack enable && corepack prepare pnpm@11.3.0 --activate
 WORKDIR /app
 COPY pnpm-workspace.yaml package.json ./
@@ -10,7 +10,7 @@ FROM deps AS build
 COPY server ./server
 RUN pnpm -F @claude-sync/server build
 
-FROM node:20-alpine AS runtime
+FROM node:22-alpine AS runtime
 ENV NODE_ENV=production
 WORKDIR /app
 RUN corepack enable && corepack prepare pnpm@11.3.0 --activate
