@@ -18,9 +18,17 @@ Files are encrypted client-side (XChaCha20-Poly1305 + AAD) before they leave you
 
 ## Install
 
+Three install paths, in order of "easiest first":
+
+| Path | When to use | What you get |
+|---|---|---|
+| **Tagged Release** | `git tag vX.Y.Z` has been pushed | Permanent `.exe` / `.dmg` on the [Releases page](https://github.com/yelgabo/claude-sync/releases); app auto-updates on future tags |
+| **Workflow artifact** | A maintainer manually ran the build workflow | Download from the [latest Actions run](https://github.com/yelgabo/claude-sync/actions/workflows/release.yml) → "Artifacts" section (retained 24h) — useful for testing unreleased commits |
+| **Dev clone** | You're hacking on the code or no Release exists yet | Clone repo + `pnpm install` + `pnpm start` — runs from source |
+
 ### Windows
 
-**Recommended (when releases exist):** download `claude-sync-{version}-win-x64.exe` from the [Releases page](https://github.com/yelgabo/claude-sync/releases) → run → done.
+**Tagged Release (recommended):** download `claude-sync-{version}-win-x64.exe` from [Releases](https://github.com/yelgabo/claude-sync/releases) → run → done.
 
 **Dev path (works today):**
 ```powershell
@@ -36,7 +44,7 @@ pnpm -F @claude-sync/desktop start
 
 ### macOS
 
-**Recommended (when releases exist):** download `claude-sync-{version}-mac-arm64.dmg` (or `-x64.dmg` for Intel) from Releases → drag to Applications. First launch needs right-click → Open (unsigned for now; Gatekeeper warning is normal).
+**Tagged Release (recommended):** download `claude-sync-{version}-mac-arm64.dmg` (or `-x64.dmg` for Intel) from [Releases](https://github.com/yelgabo/claude-sync/releases) → drag to Applications. First launch needs right-click → Open (unsigned for now; Gatekeeper warning is normal).
 
 **Dev path:**
 ```bash
@@ -136,13 +144,45 @@ claude-sync/
 
 ## Releasing a new version
 
+The `.github/workflows/release.yml` workflow runs in two modes:
+
+| Trigger | What happens | Where artifacts go |
+|---|---|---|
+| `workflow_dispatch` (manual button) | Builds `.exe` + `.dmg` | Uploaded as **workflow artifacts** (retained 24h) — testing/dev only |
+| **git tag matching `v*`** | Builds `.exe` + `.dmg` AND auto-publishes via `electron-builder` | Attached to a real **GitHub Release** that the desktop app auto-updates from |
+
+### Cutting a release
+
 ```bash
-# Bump version in desktop/package.json, then:
-git tag v0.0.2
-git push origin v0.0.2
+# 1. Bump the version everywhere
+#    (just edit desktop/package.json "version" — that's the source of truth for electron-builder)
+$EDITOR desktop/package.json
+
+# 2. Commit the bump
+git commit -am "Release v0.0.1"
+
+# 3. Tag and push
+git tag v0.0.1
+git push origin main
+git push origin v0.0.1
 ```
 
-GitHub Actions builds `.exe` (Win x64) and `.dmg` (Mac x64 + arm64) and publishes a Release. The desktop app auto-updates on its next 1-hour check.
+The push of the tag fires `.github/workflows/release.yml`. Within ~3 minutes:
+- `claude-sync-0.0.1-win-x64.exe` (NSIS installer) + `claude-sync-0.0.1-win-x64.exe` (portable variant)
+- `claude-sync-0.0.1-mac-x64.dmg` + `claude-sync-0.0.1-mac-arm64.dmg`
+- `latest.yml` + `latest-mac.yml` (auto-update manifests)
+
+…all show up at https://github.com/yelgabo/claude-sync/releases/tag/v0.0.1.
+
+Already-installed apps poll the latest manifest hourly and prompt the user to install the update.
+
+### Manual artifact build (no release)
+
+If you just want to test the latest commit without publishing a Release:
+
+1. Go to the [Actions tab](https://github.com/yelgabo/claude-sync/actions/workflows/release.yml)
+2. Click **Run workflow** → select `main` → **Run**
+3. Wait ~3 minutes, then download the `installers-windows-latest` / `installers-macos-latest` artifacts (retained 24h)
 
 ## Roadmap
 
