@@ -8,6 +8,8 @@ Claude Sync fixes that. Install it on each of your computers, sign in with the s
 
 Your files are **end-to-end encrypted** before they leave your device â€” the server that ships them between your computers can't read what's inside.
 
+> **Try it without installing anything:** the web app at **[claude-sync-production.up.railway.app](https://claude-sync-production.up.railway.app)** lets you browse, diff, and download your synced files from any browser. Read-only â€” install the desktop app to push changes.
+
 ---
 
 ## Install
@@ -56,6 +58,16 @@ That's it. The app lives in your system tray (Windows) or menu bar (Mac), and sy
 
 Install the app on your other computer. Sign in with **the same email and password**. Your files appear in the Files tab within a few seconds.
 
+### Or use the web app — no install required
+
+If you're at someone else's computer and just need to grab a file:
+
+**https://claude-sync-production.up.railway.app**
+
+Sign in with your normal email + password. Browse your synced files, see version history, click **Compare** to see what changed between any two versions, or click **Download** to save a file. Everything is decrypted in your browser — the server still can't read your data.
+
+The web app is read-only (no editing or uploading); install the desktop app on a machine you control to push changes.
+
 ---
 
 ## What you can do in the app
@@ -64,12 +76,16 @@ The window has four tabs:
 
 | Tab | What's there |
 |---|---|
-| **Files** | Everything currently synced. Click a file to see its history. Restore an older version with one click. |
+| **Files** | Everything currently synced. Click a file to see its history. **Compare** any older version against the latest with a colored diff. **Restore** an older version with one click. |
 | **Activity** | The last 50 sync events (which file changed, when). Useful for "wait, why did that file just update?" |
 | **Devices** | All your linked computers. Rename them so you remember which is which. Lost a laptop? Revoke it with one click. |
 | **Settings** | Change what gets synced, how often, whether to use a separate vault passphrase. |
 
 A tray icon (system tray on Windows, menu bar on Mac) stays alive after you close the window. Right-click it for **Sync now / Pause / Quit**.
+
+### Sync conflicts
+
+If you edit the same file on two computers while one is offline, the desktop app catches it. Before overwriting your local edit with the remote version, it saves your local copy as `<filename>.conflict-<timestamp>` so nothing is lost. The Activity tab flags the conflict; you can open both files side-by-side and merge by hand.
 
 ---
 
