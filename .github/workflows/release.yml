@@ -26,9 +26,22 @@ jobs:
       - run: pnpm -F @claude-sync/cli build
       - run: pnpm -F @claude-sync/desktop ${{ matrix.script }}
         env:
+          # Token enables electron-builder to push to GitHub Releases on tag builds
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Skip code signing in CI (we don't have certs yet)
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+      - name: Show artifacts
+        if: always()
+        shell: bash
+        run: ls -la desktop/dist-installer/ || true
       - uses: actions/upload-artifact@v4
         with:
           name: installers-${{ matrix.os }}
-          path: desktop/dist-installer/*.{exe,dmg,zip,blockmap,yml}
+          # actions/upload-artifact does NOT support brace expansion. List separately.
+          path: |
+            desktop/dist-installer/*.exe
+            desktop/dist-installer/*.dmg
+            desktop/dist-installer/*.zip
+            desktop/dist-installer/*.yml
+            desktop/dist-installer/*.blockmap
           if-no-files-found: warn
