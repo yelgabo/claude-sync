@@ -9,14 +9,14 @@
 <body>
   <header>
     <h1>Claude Sync</h1>
-    <div id="status-pill" class="pill">…</div>
+    <div id="status-pill" class="pill">â€¦</div>
   </header>
 
   <main>
     <!-- AUTH -->
     <section id="auth" class="card" hidden>
       <h2>Sign in</h2>
-      <p class="hint">Use the same email + password you use in the desktop app. Files stay end-to-end encrypted — your password derives a vault key here, in your browser, that the server never sees.</p>
+      <p class="hint">Use the same email + password you use in the desktop app. Files stay end-to-end encrypted â€” your password derives a vault key here, in your browser, that the server never sees.</p>
       <form id="auth-form">
         <label>Email <input type="email" id="email" required /></label>
         <label>Password <input type="password" id="password" required minlength="12" /></label>
@@ -40,35 +40,35 @@
       <section class="tab-pane active" data-tab-pane="files">
         <div class="row spread">
           <h3>Files <span id="file-count" class="muted"></span></h3>
-          <input type="search" id="file-filter" placeholder="filter…" class="filter" />
+          <input type="search" id="file-filter" placeholder="filterâ€¦" class="filter" />
         </div>
-        <div id="file-list" class="tree">Loading…</div>
+        <div id="file-list" class="tree">Loadingâ€¦</div>
 
         <div id="versions-drawer" class="drawer" hidden>
           <div class="row spread">
             <h3>Versions of <code id="versions-file"></code></h3>
-            <button id="versions-close" class="secondary small">×</button>
+            <button id="versions-close" class="secondary small">Ã—</button>
           </div>
           <p class="hint">Click <strong>Download</strong> on any version to decrypt it in your browser and save the original file locally. The server cannot read these versions.</p>
-          <div id="versions-list" class="versions">Loading…</div>
+          <div id="versions-list" class="versions">Loadingâ€¦</div>
         </div>
       </section>
 
       <section class="tab-pane" data-tab-pane="activity" hidden>
         <h3>Recent activity</h3>
-        <div id="activity-list" class="activity">Loading…</div>
+        <div id="activity-list" class="activity">Loadingâ€¦</div>
       </section>
 
       <section class="tab-pane" data-tab-pane="devices" hidden>
         <h3>Devices</h3>
-        <div id="device-list" class="devices">Loading…</div>
+        <div id="device-list" class="devices">Loadingâ€¦</div>
       </section>
     </div>
 
     <footer>
-      <a href="https://github.com/yelgabo/claude-sync" target="_blank" rel="noopener">claude-sync</a> ·
-      <a href="https://github.com/yelgabo/claude-sync#privacy--security" target="_blank" rel="noopener">how privacy works</a> ·
-      <span class="muted">read-only · sign-in needed to decrypt</span>
+      <a href="https://github.com/yelgabo/claude-sync" target="_blank" rel="noopener">claude-sync</a> Â·
+      <a href="https://github.com/yelgabo/claude-sync#privacy--security" target="_blank" rel="noopener">how privacy works</a> Â·
+      <span class="muted">read-only Â· sign-in needed to decrypt</span>
     </footer>
   </main>
 

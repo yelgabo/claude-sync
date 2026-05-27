@@ -1,4 +1,5 @@
 import * as api from './api.js';
+import { diffLines } from 'diff';
 import { deriveVaultKey, aeadDecrypt, b64urlToBytes, bytesToBlob } from './crypto.js';
 
 interface State {
@@ -30,12 +31,12 @@ function esc(s: string): string {
 
 // === Bootstrap ===
 async function boot(): Promise<void> {
-  setStatus('checking sessionâ€¦');
+  setStatus('checking sessionÃ¢â‚¬Â¦');
   try {
     const me = await api.me();
     state.userId = me.user.id;
     state.email = me.user.email;
-    // Session is alive but we still need the vault key â€” that requires the password.
+    // Session is alive but we still need the vault key Ã¢â‚¬â€ that requires the password.
     // Prompt for it (using a passphrase-only sign-in flow).
     showPassphrasePrompt(me.user.email);
   } catch {
@@ -58,7 +59,7 @@ function showAppShell(): void {
 }
 
 // When we have a valid session cookie but no vault key (refresh / fresh browser),
-// re-prompt for password only â€” it derives the key locally; nothing is sent to server.
+// re-prompt for password only Ã¢â‚¬â€ it derives the key locally; nothing is sent to server.
 function showPassphrasePrompt(email: string): void {
   const emailInput = $<HTMLInputElement>('email');
   emailInput.value = email;
@@ -90,7 +91,7 @@ function showPassphrasePrompt(email: string): void {
 async function unlockVault(password: string): Promise<void> {
   const meta = await api.getVaultMeta();
   if (!meta) throw new Error('No vault initialized for this account. Use the desktop app first.');
-  setStatus('deriving keyâ€¦', 'warn');
+  setStatus('deriving keyÃ¢â‚¬Â¦', 'warn');
   state.vaultKey = deriveVaultKey(password, meta.kdf_salt_b64);
   // Verify by trying to decrypt the latest version of any one file (if any exist).
   const { files } = await api.listFiles();
@@ -123,7 +124,7 @@ $('auth-form').addEventListener('submit', async (e) => {
   const email = ($('email') as HTMLInputElement).value;
   const password = ($('password') as HTMLInputElement).value;
   try {
-    setStatus('signing inâ€¦', 'warn');
+    setStatus('signing inÃ¢â‚¬Â¦', 'warn');
     const r = await api.login(email, password);
     state.userId = r.user.id;
     state.email = r.user.email;
@@ -185,7 +186,7 @@ function renderFiles(): void {
     el.className = 'row-file' + (f.deleted ? ' deleted' : '');
     el.title = 'Click for version history';
     const path = f.path ?? f.file_id;
-    el.innerHTML = `<span class="path">${esc(path)}</span><span class="meta">${f.size_bytes} B Â· seq ${f.latest_seq}</span>`;
+    el.innerHTML = `<span class="path">${esc(path)}</span><span class="meta">${f.size_bytes} B Ã‚Â· seq ${f.latest_seq}</span>`;
     el.addEventListener('click', () => openVersionsDrawer(f));
     list.appendChild(el);
   }
@@ -198,7 +199,7 @@ async function openVersionsDrawer(file: api.FileEntry): Promise<void> {
   drawer.hidden = false;
   $('versions-file').textContent = file.path ?? file.file_id;
   const list = $('versions-list');
-  list.textContent = 'Loadingâ€¦';
+  list.textContent = 'LoadingÃ¢â‚¬Â¦';
   try {
     const { versions } = await api.listVersions(file.file_id);
     list.innerHTML = '';
@@ -207,9 +208,17 @@ async function openVersionsDrawer(file: api.FileEntry): Promise<void> {
       div.className = 'ver';
       const when = new Date(v.uploaded_at).toLocaleString();
       const label = document.createElement('span');
-      label.innerHTML = `seq ${v.seq} Â· ${v.size_bytes} B Â· ${esc(when)}${v.deleted ? ' <em>(tombstone)</em>' : ''}`;
+      label.innerHTML = `seq ${v.seq} Ã‚Â· ${v.size_bytes} B Ã‚Â· ${esc(when)}${v.deleted ? ' <em>(tombstone)</em>' : ''}`;
       div.appendChild(label);
       if (!v.deleted) {
+        // Compare with latest (only meaningful for non-latest versions)
+        if (v.id !== file.latest_version_id) {
+          const cmp = document.createElement('button');
+          cmp.className = 'secondary small';
+          cmp.textContent = 'Compare';
+          cmp.addEventListener('click', () => openDiff(file, v).catch((e) => alert((e as Error).message)));
+          div.appendChild(cmp);
+        }
         const btn = document.createElement('button');
         btn.className = 'secondary small';
         btn.textContent = 'Download';
@@ -255,8 +264,8 @@ async function refreshActivity(): Promise<void> {
     for (const c of tail) {
       const div = document.createElement('div');
       div.className = 'row-act';
-      const arrow = c.deleted ? 'âœ—' : 'â†‘';
-      div.innerHTML = `<span class="arrow ${c.deleted ? 'deleted' : ''}">${arrow}</span><span class="path">${esc(c.path ?? c.file_id)}</span><span class="size">seq ${c.seq}${c.deleted ? '' : ' Â· ' + c.size_bytes + ' B'}</span>`;
+      const arrow = c.deleted ? 'Ã¢Å“â€”' : 'Ã¢â€ â€˜';
+      div.innerHTML = `<span class="arrow ${c.deleted ? 'deleted' : ''}">${arrow}</span><span class="path">${esc(c.path ?? c.file_id)}</span><span class="size">seq ${c.seq}${c.deleted ? '' : ' Ã‚Â· ' + c.size_bytes + ' B'}</span>`;
       list.appendChild(div);
     }
   } catch (e) { list.textContent = `Error: ${(e as Error).message}`; }
@@ -288,3 +297,56 @@ $('logout-btn').addEventListener('click', async () => {
 });
 
 boot();
+// === DIFF VIEW (web app) ===
+async function openDiff(file: api.FileEntry, older: api.VersionEntry): Promise<void> {
+  if (!state.vaultKey || !state.userId) throw new Error('vault locked');
+  const drawer = $('diff-view');
+  drawer.hidden = false;
+  $('diff-label').textContent = `seq ${older.seq} vs latest (seq ${file.latest_seq})`;
+  const content = $('diff-content');
+  content.innerHTML = 'Decrypting both versions…';
+
+  try {
+    const [olderV, latestV] = await Promise.all([
+      api.fetchVersion(file.file_id, older.id),
+      api.fetchVersion(file.file_id, file.latest_version_id),
+    ]);
+    const olderText = decoderText(aeadDecrypt({
+      key: state.vaultKey, ciphertext: olderV.ciphertext, nonce: b64urlToBytes(olderV.nonceB64),
+      userId: state.userId, fileId: file.file_id, versionId: older.id, keyId: olderV.keyId,
+    }));
+    const latestText = decoderText(aeadDecrypt({
+      key: state.vaultKey, ciphertext: latestV.ciphertext, nonce: b64urlToBytes(latestV.nonceB64),
+      userId: state.userId, fileId: file.file_id, versionId: file.latest_version_id, keyId: latestV.keyId,
+    }));
+    renderDiff(content, olderText, latestText);
+  } catch (e) {
+    content.textContent = `Cannot diff: ${(e as Error).message} (binary file or wrong key)`;
+  }
+}
+
+const td = new TextDecoder('utf-8', { fatal: true });
+function decoderText(bytes: Uint8Array): string {
+  return td.decode(bytes);
+}
+
+function renderDiff(container: HTMLElement, older: string, latest: string): void {
+  container.innerHTML = '';
+  const parts = diffLines(older, latest);
+  for (const p of parts) {
+    const lines = p.value.split('\n');
+    if (lines[lines.length - 1] === '') lines.pop();
+    for (const line of lines) {
+      const div = document.createElement('div');
+      const cls = p.added ? 'add' : p.removed ? 'del' : 'same';
+      div.className = `diff-line ${cls}`;
+      const m = p.added ? '+' : p.removed ? '−' : ' ';
+      div.innerHTML = `<span class="marker">${m}</span><span>${esc(line)}</span>`;
+      container.appendChild(div);
+    }
+  }
+  if (!container.children.length) {
+    container.textContent = '(no textual differences)';
+  }
+}
+$('diff-close').addEventListener('click', () => { $('diff-view').hidden = true; });
