@@ -1,4 +1,4 @@
-﻿import Fastify, { type FastifyInstance } from 'fastify';
+import Fastify, { type FastifyInstance } from 'fastify';
 import cookie from '@fastify/cookie';
 import sensible from '@fastify/sensible';
 import { loadEnv, type Env } from './env.js';
@@ -15,6 +15,7 @@ import { registerVault } from './routes/vault.js';
 import { registerFiles } from './routes/files.js';
 import { registerSync } from './routes/sync.js';
 import { ApiError } from './lib/errors.js';
+import { maybeServeWebApp } from './lib/web.js';
 
 export interface BuildOpts {
   env?: Env;
@@ -71,6 +72,8 @@ export async function buildApp(opts: BuildOpts = {}): Promise<{ app: FastifyInst
   registerVault(app, db);
   registerFiles(app, db, env);
   registerSync(app, db);
+
+  await maybeServeWebApp(app);
 
   app.addHook('onClose', async () => {
     if (!opts.db) await db!.end();

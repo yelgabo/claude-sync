@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Claude Sync</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header>
+    <h1>Claude Sync</h1>
+    <div id="status-pill" class="pill">…</div>
+  </header>
+
+  <main>
+    <!-- AUTH -->
+    <section id="auth" class="card" hidden>
+      <h2>Sign in</h2>
+      <p class="hint">Use the same email + password you use in the desktop app. Files stay end-to-end encrypted — your password derives a vault key here, in your browser, that the server never sees.</p>
+      <form id="auth-form">
+        <label>Email <input type="email" id="email" required /></label>
+        <label>Password <input type="password" id="password" required minlength="12" /></label>
+        <button type="submit">Sign in</button>
+        <p class="err" id="auth-err"></p>
+      </form>
+    </section>
+
+    <!-- APP shell with tabs -->
+    <div id="app-shell" hidden>
+      <nav class="tabs">
+        <button class="tab active" data-tab="files">Files</button>
+        <button class="tab" data-tab="activity">Activity</button>
+        <button class="tab" data-tab="devices">Devices</button>
+        <div class="tab-spacer"></div>
+        <span id="who" class="muted"></span>
+        <button id="logout-btn" class="secondary small">Log out</button>
+      </nav>
+
+      <!-- FILES -->
+      <section class="tab-pane active" data-tab-pane="files">
+        <div class="row spread">
+          <h3>Files <span id="file-count" class="muted"></span></h3>
+          <input type="search" id="file-filter" placeholder="filter…" class="filter" />
+        </div>
+        <div id="file-list" class="tree">Loading…</div>
+
+        <div id="versions-drawer" class="drawer" hidden>
+          <div class="row spread">
+            <h3>Versions of <code id="versions-file"></code></h3>
+            <button id="versions-close" class="secondary small">×</button>
+          </div>
+          <p class="hint">Click <strong>Download</strong> on any version to decrypt it in your browser and save the original file locally. The server cannot read these versions.</p>
+          <div id="versions-list" class="versions">Loading…</div>
+        </div>
+      </section>
+
+      <section class="tab-pane" data-tab-pane="activity" hidden>
+        <h3>Recent activity</h3>
+        <div id="activity-list" class="activity">Loading…</div>
+      </section>
+
+      <section class="tab-pane" data-tab-pane="devices" hidden>
+        <h3>Devices</h3>
+        <div id="device-list" class="devices">Loading…</div>
+      </section>
+    </div>
+
+    <footer>
+      <a href="https://github.com/yelgabo/claude-sync" target="_blank" rel="noopener">claude-sync</a> ·
+      <a href="https://github.com/yelgabo/claude-sync#privacy--security" target="_blank" rel="noopener">how privacy works</a> ·
+      <span class="muted">read-only · sign-in needed to decrypt</span>
+    </footer>
+  </main>
+
+  <script type="module" src="app.ts"></script>
+</body>
+</html>
