@@ -28,10 +28,15 @@ jobs:
       - run: pnpm -F @claude-sync/cli build
       - run: pnpm -F @claude-sync/desktop ${{ matrix.script }}
         env:
-          # Token enables electron-builder to push to GitHub Releases on tag builds
+          # GitHub Release publisher
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # Skip code signing in CI (we don't have certs yet)
-          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+          # macOS code signing (only set on the mac job; Windows job sees empty values and skips signing)
+          CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
+          # Notarization via Apple's notarytool (electron-builder reads these directly)
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
       - name: Show artifacts
         if: always()
         shell: bash
@@ -39,7 +44,6 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: installers-${{ matrix.os }}
-          # actions/upload-artifact does NOT support brace expansion. List separately.
           path: |
             desktop/dist-installer/*.exe
             desktop/dist-installer/*.dmg

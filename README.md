@@ -2,11 +2,11 @@
 
 **Get the same Claude on every computer.**
 
-If you use Claude Code on more than one machine — say a desktop and a laptop — you've probably noticed something annoying: a skill you wrote on one computer isn't on the other. Same with custom commands, agents, and Claude's memory of past conversations. They live on whichever device you set them up on, and they stay there.
+If you use Claude Code on more than one machine â€” say a desktop and a laptop â€” you've probably noticed something annoying: a skill you wrote on one computer isn't on the other. Same with custom commands, agents, and Claude's memory of past conversations. They live on whichever device you set them up on, and they stay there.
 
 Claude Sync fixes that. Install it on each of your computers, sign in with the same email and password, and your `.claude/` folder follows you around. Edit a skill on your laptop, and it appears on your desktop within seconds.
 
-Your files are **end-to-end encrypted** before they leave your device — the server that ships them between your computers can't read what's inside.
+Your files are **end-to-end encrypted** before they leave your device â€” the server that ships them between your computers can't read what's inside.
 
 ---
 
@@ -14,22 +14,22 @@ Your files are **end-to-end encrypted** before they leave your device — the se
 
 Pick your platform. The whole thing takes about 60 seconds.
 
-### 🪟 Windows
+### ðŸªŸ Windows
 
 1. Go to the [Releases page](https://github.com/yelgabo/claude-sync/releases/latest)
 2. Download `claude-sync-{latest-version}-win32-x64.exe`
-3. Double-click to install. Windows might warn you about an "unrecognized app" — click **More info → Run anyway**.
+3. Double-click to install. Windows might warn you about an "unrecognized app" â€” click **More info â†’ Run anyway**.
 
-### 🍎 macOS
+### ðŸŽ macOS
 
 1. Go to the [Releases page](https://github.com/yelgabo/claude-sync/releases/latest)
 2. Download the right `.dmg`:
    - **Apple Silicon** (M1/M2/M3/M4 Macs): `claude-sync-{version}-darwin-arm64.dmg`
    - **Intel** Macs: `claude-sync-{version}-darwin-x64.dmg`
 3. Open the `.dmg` and drag **Claude Sync** to **Applications**.
-4. **First launch on macOS** — the app isn't signed with an Apple Developer certificate yet, so macOS will say *"Claude Sync is damaged and can't be opened"*. It's not damaged, just unsigned. To fix it once:
+4. **First launch on macOS** â€” the app isn't signed with an Apple Developer certificate yet, so macOS will say *"Claude Sync is damaged and can't be opened"*. It's not damaged, just unsigned. To fix it once:
 
-   Open **Terminal** (Cmd+Space → "Terminal") and paste:
+   Open **Terminal** (Cmd+Space â†’ "Terminal") and paste:
    ```bash
    xattr -cr "/Applications/Claude Sync.app"
    ```
@@ -46,7 +46,7 @@ Pick your platform. The whole thing takes about 60 seconds.
 
 When you launch the app:
 
-1. **Sign up** with an email and a password (12+ characters). Pick one you'll remember — it's also what unlocks your encrypted files.
+1. **Sign up** with an email and a password (12+ characters). Pick one you'll remember â€” it's also what unlocks your encrypted files.
 2. The app **registers this computer as a device** automatically.
 3. Within 15 seconds you'll see your synced files appear in the **Files** tab.
 
@@ -75,14 +75,14 @@ A tray icon (system tray on Windows, menu bar on Mac) stays alive after you clos
 
 ## What gets synced (and what doesn't)
 
-**Synced** — the things that make your Claude *yours*:
+**Synced** â€” the things that make your Claude *yours*:
 
 - Your **skills**, **commands**, and **agents** (under `~/.claude/skills/`, `commands/`, `agents/`)
-- Your **memory** — Claude's notes about you that persist across conversations
-- Your **settings** — global preferences like theme, model choice, MCP servers, hooks
-- The **list of installed plugins** (the actual plugin code re-downloads on each machine — saves bandwidth)
+- Your **memory** â€” Claude's notes about you that persist across conversations
+- Your **settings** â€” global preferences like theme, model choice, MCP servers, hooks
+- The **list of installed plugins** (the actual plugin code re-downloads on each machine â€” saves bandwidth)
 
-**Not synced** — machine-specific stuff that shouldn't follow you:
+**Not synced** â€” machine-specific stuff that shouldn't follow you:
 
 - Your Anthropic **API key** (each machine has its own)
 - **Conversation history** (huge, machine-bound)
@@ -95,13 +95,13 @@ You can fine-tune what's synced in the **Settings** tab.
 
 ## Troubleshooting
 
-**Mac says "Claude Sync is damaged"** — see the [Install section](#-macos) above for the one-line `xattr` fix. This happens because the app isn't yet signed with a paid Apple Developer certificate.
+**Mac says "Claude Sync is damaged"** â€” see the [Install section](#-macos) above for the one-line `xattr` fix. This happens because the app isn't yet signed with a paid Apple Developer certificate.
 
-**Windows SmartScreen blocks the installer** — click **More info → Run anyway**. The installer is also unsigned (same reason). You only see this once.
+**Windows SmartScreen blocks the installer** â€” click **More info â†’ Run anyway**. The installer is also unsigned (same reason). You only see this once.
 
-**App won't sync** — check the status pill in the top-right of the window. If it says "sync error", click the Sync tab and look at the message. The most common cause is your computer going offline; sync resumes automatically when you're back online.
+**App won't sync** â€” check the status pill in the top-right of the window. If it says "sync error", click the Sync tab and look at the message. The most common cause is your computer going offline; sync resumes automatically when you're back online.
 
-**Forgot your password** — your password is also your encryption key (by default), so we can't reset it without losing your encrypted files. You'd have to start over with a fresh account. You can change this behavior in Settings → uncheck "Convenience mode" → use a separate vault passphrase.
+**Forgot your password** â€” your password is also your encryption key (by default), so we can't reset it without losing your encrypted files. You'd have to start over with a fresh account. You can change this behavior in Settings â†’ uncheck "Convenience mode" â†’ use a separate vault passphrase.
 
 **Something else broken?** Open an [issue on GitHub](https://github.com/yelgabo/claude-sync/issues).
 
@@ -113,7 +113,7 @@ You can fine-tune what's synced in the **Settings** tab.
 
 The encryption is XChaCha20-Poly1305 with associated-data binding (industry-standard authenticated encryption). The exact implementation details, including all the cryptographic decisions and why we made them, are in [`docs/TECHNICAL.md`](docs/TECHNICAL.md).
 
-**Your password trade-off:** by default, your login password also derives your encryption key. This is convenient (one secret to remember) but means a malicious server could in theory derive the same key during login. If you want stronger separation, turn off "Convenience mode" in Settings — you'll get a separate vault passphrase that the server never sees.
+**Your password trade-off:** by default, your login password also derives your encryption key. This is convenient (one secret to remember) but means a malicious server could in theory derive the same key during login. If you want stronger separation, turn off "Convenience mode" in Settings â€” you'll get a separate vault passphrase that the server never sees.
 
 ---
 

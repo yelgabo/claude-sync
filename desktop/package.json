@@ -58,7 +58,12 @@
                                              }
                                          ],
                               "category":  "public.app-category.developer-tools",
-                              "icon":  "../assets/icon-1024.png"
+                              "icon":  "../assets/icon-1024.png",
+                              "hardenedRuntime":  true,
+                              "gatekeeperAssess":  false,
+                              "entitlements":  "build/entitlements.mac.plist",
+                              "entitlementsInherit":  "build/entitlements.mac.plist",
+                              "notarize":  true
                           },
                   "nsis":  {
                                "oneClick":  false,
