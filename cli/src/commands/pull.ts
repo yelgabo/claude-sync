@@ -25,7 +25,6 @@ export async function pull(opts: { passphrase?: string } = {}): Promise<void> {
     const { changes, next_seq, has_more } = await api.sync(cursor, 200);
     if (changes.length === 0) break;
 
-    // Latest change per file_id in this batch.
     const latestByFile = new Map<string, typeof changes[number]>();
     for (const c of changes) latestByFile.set(c.file_id, c);
 
@@ -34,7 +33,7 @@ export async function pull(opts: { passphrase?: string } = {}): Promise<void> {
       const abs = join(config.syncRoot, c.path);
 
       if (c.deleted) {
-        // If local was edited since last sync, preserve it as a conflict copy before deleting.
+        let applied = true;
         if (existsSync(abs)) {
           try {
             const local = await readFile(abs);
@@ -46,13 +45,25 @@ export async function pull(opts: { passphrase?: string } = {}): Promise<void> {
               conflicts++;
               console.log(`! conflict-on-delete: ${c.path} kept as ${conflictPath.replace(config.syncRoot, '~/.claude')}`);
             } else {
-              await unlink(abs).catch(() => undefined);
+              await unlink(abs);
             }
-          } catch { /* file already gone */ }
+          } catch (err) {
+            if ((err as { code?: string }).code !== 'ENOENT') {
+              applied = false;
+              console.error(`! delete failed for ${c.path}: ${(err as Error).message}`);
+            }
+          }
         }
-        deleted++;
-        delete manifest[c.path];
-        console.log(`- ${c.path}`);
+        if (applied) {
+          delete manifest[c.path];
+          deleted++;
+          console.log(`- ${c.path}`);
+          // Persist after each applied change — a crash mid-batch would otherwise leave
+          // the cursor advanced in memory while disk state still reflects the prior version.
+          config.cursor = c.seq;
+          await saveManifest(manifest);
+          await saveConfig(config);
+        }
         continue;
       }
 
@@ -63,14 +74,12 @@ export async function pull(opts: { passphrase?: string } = {}): Promise<void> {
         userId: config.userId, fileId: c.file_id, versionId: got.versionId, keyId: got.keyId,
       });
 
-      // === Conflict detection: did the local file change since we last knew about it? ===
       if (existsSync(abs)) {
         const local = await readFile(abs);
         const localHash = (await blake2b(local)).toString('base64url');
         const prev = manifest[c.path];
         const remoteHash = (await blake2b(plaintext)).toString('base64url');
         if (prev && prev.plaintextHashB64 !== localHash && localHash !== remoteHash) {
-          // Local was edited AND differs from what's about to land. Save local as .conflict-* before overwrite.
           const conflictPath = await makeConflictPath(abs);
           await rename(abs, conflictPath);
           conflicts++;
@@ -84,15 +93,17 @@ export async function pull(opts: { passphrase?: string } = {}): Promise<void> {
       manifest[c.path] = { fileId: c.file_id, lastSeq: c.seq, plaintextHashB64: h };
       downloaded++;
       console.log(`> ${c.path}  seq=${c.seq}`);
+      config.cursor = c.seq;
+      await saveManifest(manifest);
+      await saveConfig(config);
     }
 
     cursor = next_seq;
+    config.cursor = cursor;
+    await saveConfig(config);
     if (!has_more) break;
   }
 
-  config.cursor = cursor;
-  await saveConfig(config);
-  await saveManifest(manifest);
   console.log(`downloaded ${downloaded}, deleted ${deleted}, conflicts ${conflicts}, cursor=${config.cursor}`);
 }
 

@@ -1,10 +1,15 @@
 import { readFile, readdir, stat } from 'node:fs/promises';
 import { join, relative, sep, posix } from 'node:path';
-import { v4 as uuidv4, v7 as uuidv7 } from 'uuid';
+import { v5 as uuidv5, v7 as uuidv7 } from 'uuid';
 import { Api } from '../api.js';
 import { loadConfig, saveConfig, loadManifest, saveManifest, type Manifest } from '../config.js';
 import { aeadEncrypt, blake2b, deriveVaultKey } from '../crypto.js';
 import { getPassphrase } from '../prompt.js';
+
+// Stable namespace for deterministic versionId derivation: same (fileId, plaintextHash)
+// always yields the same versionId, so a retried PUT after a lost response presents
+// the same id and the server's PK constraint suppresses orphan duplicates.
+const VERSION_ID_NAMESPACE = 'a9d3b1f4-7c1a-4b9e-8a13-1cf8d1a4d5b2';
 
 function toPosix(p: string): string { return p.split(sep).join(posix.sep); }
 
@@ -53,6 +58,7 @@ export async function push(opts: { passphrase?: string } = {}): Promise<void> {
   let pushed = 0;
   let skipped = 0;
   let lastSeq = config.cursor;
+  const failures: { rel: string; error: Error }[] = [];
 
   for (const abs of absPaths) {
     const rel = toPosix(relative(root, abs));
@@ -71,7 +77,9 @@ export async function push(opts: { passphrase?: string } = {}): Promise<void> {
     if (prev && prev.plaintextHashB64 === hashB64) { skipped++; continue; }
 
     const fileId = prev?.fileId ?? uuidv7();
-    const versionId = uuidv4();
+    // Deterministic versionId: same (fileId, hash) -> same id, so a retry after a
+    // lost response submits the same id and the server's PK constraint dedupes it.
+    const versionId = uuidv5(`${fileId}|${hashB64}`, VERSION_ID_NAMESPACE);
     const { ciphertext, nonce } = await aeadEncrypt({
       key, plaintext, userId: config.userId, fileId, versionId, keyId: config.keyId,
     });
@@ -82,13 +90,27 @@ export async function push(opts: { passphrase?: string } = {}): Promise<void> {
       lastSeq = Math.max(lastSeq, r.seq);
       pushed++;
       console.log(`+ ${rel}  seq=${r.seq}`);
+      // Persist incrementally so a crash mid-batch doesn't lose the manifest entries
+      // for files we already uploaded to the server.
+      config.cursor = lastSeq;
+      await saveManifest(manifest);
+      await saveConfig(config);
     } catch (e) {
-      console.error(`! ${rel}: ${(e as Error).message}`);
+      const err = e as Error;
+      failures.push({ rel, error: err });
+      console.error(`! ${rel}: ${err.message}`);
     }
   }
 
   config.cursor = lastSeq;
   await saveConfig(config);
   await saveManifest(manifest);
-  console.log(`pushed ${pushed}, skipped ${skipped}, cursor=${config.cursor}`);
+  console.log(`pushed ${pushed}, skipped ${skipped}, failed ${failures.length}, cursor=${config.cursor}`);
+  if (failures.length > 0) {
+    // Surface failures so the caller (watch loop, syncOnce in the desktop) can back
+    // off and surface an error to the user — silently dropping them would mask data
+    // loss across an entire batch.
+    const first = failures[0]!;
+    throw new Error(`push: ${failures.length} file(s) failed; first: ${first.rel}: ${first.error.message}`);
+  }
 }

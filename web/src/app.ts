@@ -31,12 +31,12 @@ function esc(s: string): string {
 
 // === Bootstrap ===
 async function boot(): Promise<void> {
-  setStatus('checking sessionÃ¢â‚¬Â¦');
+  setStatus('checking session...');
   try {
     const me = await api.me();
     state.userId = me.user.id;
     state.email = me.user.email;
-    // Session is alive but we still need the vault key Ã¢â‚¬â€ that requires the password.
+    // Session is alive but we still need the vault key -- that requires the password.
     // Prompt for it (using a passphrase-only sign-in flow).
     showPassphrasePrompt(me.user.email);
   } catch {
@@ -59,7 +59,7 @@ function showAppShell(): void {
 }
 
 // When we have a valid session cookie but no vault key (refresh / fresh browser),
-// re-prompt for password only Ã¢â‚¬â€ it derives the key locally; nothing is sent to server.
+// re-prompt for password only -- it derives the key locally; nothing is sent to server.
 function showPassphrasePrompt(email: string): void {
   const emailInput = $<HTMLInputElement>('email');
   emailInput.value = email;
@@ -78,7 +78,11 @@ function showPassphrasePrompt(email: string): void {
   newForm.addEventListener('submit', async (e) => {
     e.preventDefault();
     $('auth-err').textContent = '';
-    const password = ($('password') as HTMLInputElement).value;
+    const pwInput = $<HTMLInputElement>('password');
+    const password = pwInput.value;
+    // Clear the input before any await so the password isn't recoverable from the
+    // DOM later (devtools, future XSS, accidental form re-render).
+    pwInput.value = '';
     try {
       await unlockVault(password);
       showAppShell();
@@ -91,7 +95,7 @@ function showPassphrasePrompt(email: string): void {
 async function unlockVault(password: string): Promise<void> {
   const meta = await api.getVaultMeta();
   if (!meta) throw new Error('No vault initialized for this account. Use the desktop app first.');
-  setStatus('deriving keyÃ¢â‚¬Â¦', 'warn');
+  setStatus('deriving key...', 'warn');
   state.vaultKey = deriveVaultKey(password, meta.kdf_salt_b64);
   // Verify by trying to decrypt the latest version of any one file (if any exist).
   const { files } = await api.listFiles();
@@ -122,9 +126,13 @@ $('auth-form').addEventListener('submit', async (e) => {
   e.preventDefault();
   $('auth-err').textContent = '';
   const email = ($('email') as HTMLInputElement).value;
-  const password = ($('password') as HTMLInputElement).value;
+  const pwInput = $<HTMLInputElement>('password');
+  const password = pwInput.value;
+  // Wipe before any network call so the input never holds the password longer
+  // than the synchronous handler. Local `password` binding is GC'd after derivation.
+  pwInput.value = '';
   try {
-    setStatus('signing inÃ¢â‚¬Â¦', 'warn');
+    setStatus('signing in...', 'warn');
     const r = await api.login(email, password);
     state.userId = r.user.id;
     state.email = r.user.email;
@@ -186,7 +194,7 @@ function renderFiles(): void {
     el.className = 'row-file' + (f.deleted ? ' deleted' : '');
     el.title = 'Click for version history';
     const path = f.path ?? f.file_id;
-    el.innerHTML = `<span class="path">${esc(path)}</span><span class="meta">${f.size_bytes} B Ã‚Â· seq ${f.latest_seq}</span>`;
+    el.innerHTML = `<span class="path">${esc(path)}</span><span class="meta">${f.size_bytes} B ·  seq ${f.latest_seq}</span>`;
     el.addEventListener('click', () => openVersionsDrawer(f));
     list.appendChild(el);
   }
@@ -199,7 +207,7 @@ async function openVersionsDrawer(file: api.FileEntry): Promise<void> {
   drawer.hidden = false;
   $('versions-file').textContent = file.path ?? file.file_id;
   const list = $('versions-list');
-  list.textContent = 'LoadingÃ¢â‚¬Â¦';
+  list.textContent = 'Loading...';
   try {
     const { versions } = await api.listVersions(file.file_id);
     list.innerHTML = '';
@@ -208,7 +216,7 @@ async function openVersionsDrawer(file: api.FileEntry): Promise<void> {
       div.className = 'ver';
       const when = new Date(v.uploaded_at).toLocaleString();
       const label = document.createElement('span');
-      label.innerHTML = `seq ${v.seq} Ã‚Â· ${v.size_bytes} B Ã‚Â· ${esc(when)}${v.deleted ? ' <em>(tombstone)</em>' : ''}`;
+      label.innerHTML = `seq ${v.seq} ·  ${v.size_bytes} B ·  ${esc(when)}${v.deleted ? ' <em>(tombstone)</em>' : ''}`;
       div.appendChild(label);
       if (!v.deleted) {
         // Compare with latest (only meaningful for non-latest versions)
@@ -264,8 +272,8 @@ async function refreshActivity(): Promise<void> {
     for (const c of tail) {
       const div = document.createElement('div');
       div.className = 'row-act';
-      const arrow = c.deleted ? 'Ã¢Å“â€”' : 'Ã¢â€ â€˜';
-      div.innerHTML = `<span class="arrow ${c.deleted ? 'deleted' : ''}">${arrow}</span><span class="path">${esc(c.path ?? c.file_id)}</span><span class="size">seq ${c.seq}${c.deleted ? '' : ' Ã‚Â· ' + c.size_bytes + ' B'}</span>`;
+      const arrow = c.deleted ? 'x' : 'up';
+      div.innerHTML = `<span class="arrow ${c.deleted ? 'deleted' : ''}">${arrow}</span><span class="path">${esc(c.path ?? c.file_id)}</span><span class="size">seq ${c.seq}${c.deleted ? '' : ' ·  ' + c.size_bytes + ' B'}</span>`;
       list.appendChild(div);
     }
   } catch (e) { list.textContent = `Error: ${(e as Error).message}`; }
@@ -304,7 +312,7 @@ async function openDiff(file: api.FileEntry, older: api.VersionEntry): Promise<v
   drawer.hidden = false;
   $('diff-label').textContent = `seq ${older.seq} vs latest (seq ${file.latest_seq})`;
   const content = $('diff-content');
-  content.innerHTML = 'Decrypting both versions…';
+  content.innerHTML = 'Decrypting both versions...';
 
   try {
     const [olderV, latestV] = await Promise.all([

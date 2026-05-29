@@ -30,6 +30,9 @@ export async function verifyPassword(password: string, hash: string): Promise<bo
   const salt = Buffer.from(parts[4]!, 'base64');
   const expected = Buffer.from(parts[5]!, 'base64');
   if (!Number.isFinite(n) || !Number.isFinite(r) || !Number.isFinite(p)) return false;
+  // Reject stored work factors outside policy. Otherwise an attacker with DB write
+  // access could downgrade (N=1 → trivial brute force) or amplify (huge N → per-login DoS).
+  if (n !== N || r !== R || p !== P) return false;
   try {
     const got = await scrypt(password, salt, expected.length, { N: n, r, p, maxmem: 256 * 1024 * 1024 });
     if (got.length !== expected.length) return false;

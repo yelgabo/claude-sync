@@ -9,7 +9,7 @@
 <body>
   <header>
     <h1>Claude Sync</h1>
-    <div id="status-pill" class="pill">…</div>
+    <div id="status-pill" class="pill">...</div>
   </header>
 
   <main>
@@ -23,12 +23,12 @@
           <button type="submit" id="login-btn">Log in</button>
           <button type="button" id="signup-btn">Sign up</button>
         </div>
-        <p class="hint">Password must be at least 12 characters. Convenience mode (on by default) uses this password to derive your vault key — no separate passphrase needed.</p>
+        <p class="hint">Password must be at least 12 characters. Convenience mode (on by default) uses this password to derive your vault key -- no separate passphrase needed.</p>
         <p class="err" id="auth-err"></p>
       </form>
     </section>
 
-    <!-- (legacy fallback) device + vault sections — shown only when convenience mode is OFF -->
+    <!-- (legacy fallback) device + vault sections -- shown only when convenience mode is OFF -->
     <section id="device-section" class="card" hidden>
       <h2>Register this device</h2>
       <form id="device-form">
@@ -68,36 +68,36 @@
       <section class="tab-pane active" data-tab-pane="files">
         <div class="row spread">
           <h3>Files on server <span id="file-count" class="muted"></span></h3>
-          <input type="search" id="file-filter" placeholder="filter…" class="filter" />
+          <input type="search" id="file-filter" placeholder="filter..." class="filter" />
         </div>
-        <div id="file-tree" class="tree">Loading…</div>
+        <div id="file-tree" class="tree">Loading...</div>
 
         <!-- Version history drawer -->
         <div id="versions-drawer" class="drawer" hidden>
           <div class="row spread">
             <h3>Versions of <code id="versions-file"></code></h3>
-            <button id="versions-close" class="secondary small">×</button>
+            <button id="versions-close" class="secondary small">x</button>
           </div>
-          <div id="versions-list" class="versions">Loading…</div>
+          <div id="versions-list" class="versions">Loading...</div>
         </div>
       </section>
 
       <!-- ACTIVITY TAB -->
       <section class="tab-pane" data-tab-pane="activity" hidden>
         <h3>Recent activity</h3>
-        <div id="activity-list" class="activity">Loading…</div>
+        <div id="activity-list" class="activity">Loading...</div>
       </section>
 
       <!-- DEVICES TAB -->
       <section class="tab-pane" data-tab-pane="devices" hidden>
         <h3>Devices</h3>
-        <div id="device-list" class="devices">Loading…</div>
+        <div id="device-list" class="devices">Loading...</div>
       </section>
 
       <!-- SETTINGS TAB -->
       <section class="tab-pane" data-tab-pane="settings" hidden>
         <h3>Sync</h3>
-        <label class="checkbox"><input type="checkbox" id="convenience-mode" /> Convenience mode — use login password as vault key (no separate passphrase)</label>
+        <label class="checkbox"><input type="checkbox" id="convenience-mode" /> Convenience mode -- use login password as vault key (no separate passphrase)</label>
 
         <div class="row spread">
           <span>Sync interval</span>

@@ -133,19 +133,53 @@ function defaultExchange(clientId: string, clientSecret: string, authUrl: string
         redirect_uri: `${authUrl}/auth/github/callback`,
       }),
     });
-    const json = (await res.json()) as { access_token?: string; error?: string };
-    if (!json.access_token) throw new ApiError('unauthorized', `github token exchange failed: ${json.error ?? 'unknown'}`);
+    const parsed = (await res.json().catch(() => null)) as unknown;
+    if (!parsed || typeof parsed !== 'object') {
+      throw new ApiError('unauthorized', 'github token exchange returned non-JSON');
+    }
+    const json = parsed as { access_token?: unknown; error?: unknown };
+    if (typeof json.access_token !== 'string' || json.access_token.length === 0) {
+      const errStr = typeof json.error === 'string' ? json.error : 'unknown';
+      throw new ApiError('unauthorized', `github token exchange failed: ${errStr}`);
+    }
     return json.access_token;
   };
 }
 
 async function defaultFetchUser(token: string): Promise<GitHubUser> {
-  const res = await fetch('https://api.github.com/user', {
+  const userRes = await fetch('https://api.github.com/user', {
     headers: { Authorization: `Bearer ${token}`, 'User-Agent': 'claude-sync' },
   });
-  if (!res.ok) throw new ApiError('unauthorized', `github /user failed: ${res.status}`);
-  const u = (await res.json()) as { id: number; email: string | null };
-  return { id: u.id, email: u.email };
+  if (!userRes.ok) throw new ApiError('unauthorized', `github /user failed: ${userRes.status}`);
+  const userJson = (await userRes.json()) as unknown;
+  if (!userJson || typeof userJson !== 'object' || typeof (userJson as { id?: unknown }).id !== 'number') {
+    throw new ApiError('unauthorized', 'github /user returned unexpected shape');
+  }
+  const id = (userJson as { id: number }).id;
+
+  // Trust only a verified primary email. /user.email reflects whichever address the user
+  // selected and is not guaranteed verified — using it directly enables account-takeover
+  // before the victim's first login.
+  const emailsRes = await fetch('https://api.github.com/user/emails', {
+    headers: { Authorization: `Bearer ${token}`, 'User-Agent': 'claude-sync' },
+  });
+  if (!emailsRes.ok) throw new ApiError('unauthorized', `github /user/emails failed: ${emailsRes.status}`);
+  const emailsJson = (await emailsRes.json()) as unknown;
+  if (!Array.isArray(emailsJson)) {
+    throw new ApiError('unauthorized', 'github /user/emails returned unexpected shape');
+  }
+  const pick = (wantPrimary: boolean): string | null => {
+    for (const entry of emailsJson) {
+      if (!entry || typeof entry !== 'object') continue;
+      const e = entry as { email?: unknown; verified?: unknown; primary?: unknown };
+      if (typeof e.email !== 'string' || e.verified !== true) continue;
+      if (wantPrimary && e.primary !== true) continue;
+      return e.email;
+    }
+    return null;
+  };
+  const verifiedEmail = pick(true) ?? pick(false);
+  return { id, email: verifiedEmail };
 }
 
 

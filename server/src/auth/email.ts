@@ -25,6 +25,18 @@ export function registerEmailAuth(app: FastifyInstance, db: DbClient): void {
       throw new ApiError('invalid_request', parsed.error.issues.map((i) => i.message).join('; '));
     }
     const email = normalizeEmail(parsed.data.email);
+
+    // Pre-check duplicate before paying scrypt cost (~500 ms / 134 MiB). The
+    // unique-constraint catch below still handles the TOCTOU race between two
+    // concurrent signups for the same email.
+    const existing = await db.query<{ id: string }>(
+      `SELECT id FROM users WHERE lower(email) = $1 LIMIT 1`,
+      [email],
+    );
+    if (existing.rows.length > 0) {
+      throw new ApiError('conflict', 'email already registered');
+    }
+
     const hash = await hashPassword(parsed.data.password);
 
     const id = uuidv4();

@@ -39,7 +39,7 @@ export async function vaultInit(): Promise<void> {
   config.kdfSaltB64 = meta.kdf_salt_b64;
   config.keyId = keyId;
   await saveConfig(config);
-  console.log(`Vault initialized (key_id=${keyId}). Remember your passphrase â€” it is the only way to decrypt your files.`);
+  console.log(`Vault initialized (key_id=${keyId}). Remember your passphrase -- it is the only way to decrypt your files.`);
 }
 
 export async function vaultAdopt(): Promise<void> {

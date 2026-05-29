@@ -45,7 +45,10 @@ const DEFAULT: Config = {
     'mcp-health-cache.json', '.last-cleanup',
   ],
   cursor: 0,
-  convenienceMode: true,
+  // Off by default: when true, the vault key derives from the login password, and
+  // the server sees that password in plaintext during /auth/login — defeating the
+  // E2E guarantee. Users who want the trade-off must opt in.
+  convenienceMode: false,
 };
 
 export async function loadConfig(): Promise<Config> {
