@@ -18,18 +18,11 @@ Pick your platform. The whole thing takes about 60 seconds.
 
 ### ðŸªŸ Windows
 
-1. Go to the [Releases page](https://github.com/yelgabo/claude-sync/releases/latest)
-2. Download `claude-sync-{latest-version}-win32-x64.exe`
-3. Double-click to install. Windows might warn you about an "unrecognized app" â€” click **More info â†’ Run anyway**.
+Download `*-win32-x64.exe` from the [Releases page](https://github.com/yelgabo/claude-sync/releases/latest) and run it. SmartScreen warns once ("unrecognized app") â€” click **More info â†’ Run anyway**.
 
 ### ðŸŽ macOS
 
-1. Go to the [Releases page](https://github.com/yelgabo/claude-sync/releases/latest)
-2. Download the right `.dmg`:
-   - **Apple Silicon** (M1/M2/M3/M4 Macs): `claude-sync-{version}-darwin-arm64.dmg`
-   - **Intel** Macs: `claude-sync-{version}-darwin-x64.dmg`
-3. Open the `.dmg` and drag **Claude Sync** to **Applications**.
-4. Launch it from Applications. The app is **signed with an Apple Developer ID and notarized by Apple**, so it opens with a normal double-click â€” no "damaged" warnings or workarounds.
+Download the `.dmg` from the [Releases page](https://github.com/yelgabo/claude-sync/releases/latest) â€” `*-darwin-arm64.dmg` for Apple Silicon, `*-darwin-x64.dmg` for Intel. Signed and notarized by Apple, so it just opens.
 
 ---
 
