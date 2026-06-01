@@ -29,18 +29,7 @@ Pick your platform. The whole thing takes about 60 seconds.
    - **Apple Silicon** (M1/M2/M3/M4 Macs): `claude-sync-{version}-darwin-arm64.dmg`
    - **Intel** Macs: `claude-sync-{version}-darwin-x64.dmg`
 3. Open the `.dmg` and drag **Claude Sync** to **Applications**.
-4. **First launch on macOS** â€” the app isn't signed with an Apple Developer certificate yet, so macOS will say *"Claude Sync is damaged and can't be opened"*. It's not damaged, just unsigned. To fix it once:
-
-   Open **Terminal** (Cmd+Space â†’ "Terminal") and paste:
-   ```bash
-   xattr -cr "/Applications/Claude Sync.app"
-   ```
-   Press Enter. Now you can open the app normally. You only ever need to do this once per install.
-
-   > If the above doesn't work (some macOS versions are stricter), run this too:
-   > ```bash
-   > codesign --force --deep --sign - "/Applications/Claude Sync.app"
-   > ```
+4. Launch it from Applications. The app is **signed with an Apple Developer ID and notarized by Apple**, so it opens with a normal double-click â€” no "damaged" warnings or workarounds.
 
 ---
 
@@ -111,9 +100,7 @@ You can fine-tune what's synced in the **Settings** tab.
 
 ## Troubleshooting
 
-**Mac says "Claude Sync is damaged"** â€” see the [Install section](#-macos) above for the one-line `xattr` fix. This happens because the app isn't yet signed with a paid Apple Developer certificate.
-
-**Windows SmartScreen blocks the installer** â€” click **More info â†’ Run anyway**. The installer is also unsigned (same reason). You only see this once.
+**Windows SmartScreen blocks the installer** â€” click **More info â†’ Run anyway**. The Windows installer isn't code-signed yet, so SmartScreen warns "unrecognized publisher"; you only see this once. (The macOS app *is* signed and notarized, so Macs don't show this.)
 
 **App won't sync** â€” check the status pill in the top-right of the window. If it says "sync error", click the Sync tab and look at the message. The most common cause is your computer going offline; sync resumes automatically when you're back online.
 
