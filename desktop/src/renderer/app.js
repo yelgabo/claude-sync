@@ -249,7 +249,7 @@ function renderChipList(containerId, items, settingKey) {
   for (const it of items) {
     const chip = document.createElement('span');
     chip.className = 'chip';
-    chip.innerHTML = `${escapeHtml(it)} <button title="remove">Ã--</button>`;
+    chip.innerHTML = `${escapeHtml(it)} <button title="remove">×</button>`;
     chip.querySelector('button').addEventListener('click', async () => {
       const cur = (await claudeSync.getSettings())[settingKey] || [];
       const next = cur.filter((x) => x !== it);
