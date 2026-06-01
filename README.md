@@ -18,7 +18,7 @@ Pick your platform. The whole thing takes about 60 seconds.
 
 ### 🪟 Windows
 
-Download `*-win32-x64.exe` from the [Releases page](https://github.com/yelgabo/claude-sync/releases/latest) and run it. SmartScreen warns once ("unrecognized app") — click **More info → Run anyway**.
+Download `*-win32-x64.exe` from the [Releases page](https://github.com/yelgabo/claude-sync/releases/latest) and run it.
 
 ### 🍎 macOS
 
@@ -92,8 +92,6 @@ You can fine-tune what's synced in the **Settings** tab.
 ---
 
 ## Troubleshooting
-
-**Windows SmartScreen blocks the installer** — click **More info → Run anyway**. The Windows installer isn't code-signed yet, so SmartScreen warns "unrecognized publisher"; you only see this once. (The macOS app *is* signed and notarized, so Macs don't show this.)
 
 **App won't sync** — check the status pill in the top-right of the window. If it says "sync error", click the Sync tab and look at the message. The most common cause is your computer going offline; sync resumes automatically when you're back online.
 
