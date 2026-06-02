@@ -77,7 +77,6 @@ describe('PUT /api/files/:fileId/versions/:versionId', () => {
     });
     expect(get.statusCode).toBe(200);
     expect(get.headers['content-type']).toBe('application/octet-stream');
-    expect(get.headers['x-key-id']).toBe(keyId);
     expect(Buffer.compare(get.rawPayload, ciphertext)).toBe(0);
   });
 
@@ -132,29 +131,6 @@ describe('PUT /api/files/:fileId/versions/:versionId', () => {
       payload: ciphertext,
     });
     expect([413, 400]).toContain(put.statusCode);
-  });
-
-  it('rejects unknown key_id with 400', async () => {
-    const built = await makeApp();
-    app = built.app;
-    const { session, userId, keyId: _ } = await bootstrap(app, { id: 3, email: 'c@e' });
-    const key = await makeKey();
-    const fileId = newFileId();
-    const versionId = newVersionId();
-    const wrongKeyId = uuidv4();
-    const { ciphertext, nonce } = await encrypt({ key, plaintext: Buffer.from('x'), userId, fileId, versionId, keyId: wrongKeyId });
-    const put = await app.inject({
-      method: 'PUT', url: `/api/files/${fileId}/versions/${versionId}`,
-      cookies: { '__Host-session': session },
-      headers: {
-        'x-requested-with': 'claude-sync',
-        'content-type': 'application/octet-stream',
-        'x-nonce': nonce.toString('base64url'),
-        'x-key-id': wrongKeyId,
-      },
-      payload: ciphertext,
-    });
-    expect(put.statusCode).toBe(400);
   });
 
   it('rejects missing X-Requested-With with 400', async () => {

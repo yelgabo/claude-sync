@@ -87,38 +87,21 @@ export class Api {
     }));
   }
 
-  async getVaultMeta(): Promise<{ kdf_algo: 'argon2id'; kdf_salt_b64: string; key_id: string } | null> {
-    const res = await this.req('/api/vault/key-metadata');
-    if (res.status === 404) return null;
-    return this.json(res);
-  }
-
-  async putVaultMeta(meta: { kdf_algo: 'argon2id'; kdf_salt_b64: string; key_id: string }): Promise<void> {
-    const res = await this.req('/api/vault/key-metadata', {
-      method: 'PUT',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(meta),
-    });
-    await this.expectOk(res);
-  }
-
   async putFileVersion(
     fileId: string, versionId: string,
-    ciphertext: Buffer, nonceB64: string, keyId: string, path?: string,
+    content: Buffer, path?: string,
   ): Promise<{ seq: number; uploaded_at: string }> {
     const headers: Record<string, string> = {
       'content-type': 'application/octet-stream',
-      'x-nonce': nonceB64,
-      'x-key-id': keyId,
     };
     if (path) headers['x-path'] = path;
     const res = await this.req(`/api/files/${fileId}/versions/${versionId}`, {
-      method: 'PUT', headers, body: ciphertext,
+      method: 'PUT', headers, body: content,
     });
     return this.json(res);
   }
 
-  async getLatest(fileId: string): Promise<{ ciphertext: Buffer; nonceB64: string; keyId: string; versionId: string; seq: number } | { gone: true; latestVersionId: string }> {
+  async getLatest(fileId: string): Promise<{ content: Buffer; versionId: string; seq: number } | { gone: true; latestVersionId: string }> {
     const res = await this.req(`/api/files/${fileId}`);
     if (res.status === 410) {
       return { gone: true, latestVersionId: res.headers.get('x-latest-version-id') ?? '' };
@@ -129,9 +112,7 @@ export class Api {
     }
     const buf = Buffer.from(await res.arrayBuffer());
     return {
-      ciphertext: buf,
-      nonceB64: res.headers.get('x-nonce') ?? '',
-      keyId: res.headers.get('x-key-id') ?? '',
+      content: buf,
       versionId: res.headers.get('x-version-id') ?? '',
       seq: Number(res.headers.get('x-seq') ?? '0'),
     };
@@ -148,12 +129,6 @@ export class Api {
       throw new ApiError(res.status, err?.error?.code ?? 'unknown', err?.error?.message ?? text);
     }
     return JSON.parse(text) as T;
-  }
-
-  private async expectOk(res: Response): Promise<void> {
-    if (res.ok) return;
-    const err = safeJson(await res.text());
-    throw new ApiError(res.status, err?.error?.code ?? 'unknown', err?.error?.message ?? '');
   }
 }
 

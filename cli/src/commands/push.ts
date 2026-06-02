@@ -3,8 +3,7 @@ import { join, relative, sep, posix } from 'node:path';
 import { v5 as uuidv5, v7 as uuidv7 } from 'uuid';
 import { Api } from '../api.js';
 import { loadConfig, saveConfig, loadManifest, saveManifest, type Manifest } from '../config.js';
-import { aeadEncrypt, blake2b, deriveVaultKey } from '../crypto.js';
-import { getPassphrase } from '../prompt.js';
+import { blake2b } from '../crypto.js';
 
 // Stable namespace for deterministic versionId derivation: same (fileId, plaintextHash)
 // always yields the same versionId, so a retried PUT after a lost response presents
@@ -42,13 +41,10 @@ function ex_is_match(p: string, pattern: string): boolean {
   return p === pattern || p.startsWith(pattern + '/');
 }
 
-export async function push(opts: { passphrase?: string } = {}): Promise<void> {
+export async function push(): Promise<void> {
   const config = await loadConfig();
   if (!config.session) throw new Error('not logged in');
   if (!config.deviceId) throw new Error('no device registered');
-  if (!config.keyId || !config.kdfSaltB64 || !config.userId) throw new Error('vault not initialized; run `vault-init`');
-  const passphrase = opts.passphrase ?? await getPassphrase();
-  const key = await deriveVaultKey(passphrase, config.kdfSaltB64);
 
   const api = new Api(config);
   const manifest = await loadManifest();
@@ -65,14 +61,14 @@ export async function push(opts: { passphrase?: string } = {}): Promise<void> {
     if (!shouldSync(rel, config.includePrefixes, config.excludePrefixes)) continue;
 
     const st = await stat(abs);
-    if (st.size > 1024 * 1024 - 32) {  // leave room for AEAD overhead under 1 MiB cap
+    if (st.size > 1024 * 1024) {  // 1 MiB server cap
       console.warn(`skip too-large: ${rel} (${st.size} bytes)`);
       skipped++;
       continue;
     }
 
-    const plaintext = await readFile(abs);
-    const hashB64 = (await blake2b(plaintext)).toString('base64url');
+    const content = await readFile(abs);
+    const hashB64 = (await blake2b(content)).toString('base64url');
     const prev = manifest[rel];
     if (prev && prev.plaintextHashB64 === hashB64) { skipped++; continue; }
 
@@ -80,12 +76,9 @@ export async function push(opts: { passphrase?: string } = {}): Promise<void> {
     // Deterministic versionId: same (fileId, hash) -> same id, so a retry after a
     // lost response submits the same id and the server's PK constraint dedupes it.
     const versionId = uuidv5(`${fileId}|${hashB64}`, VERSION_ID_NAMESPACE);
-    const { ciphertext, nonce } = await aeadEncrypt({
-      key, plaintext, userId: config.userId, fileId, versionId, keyId: config.keyId,
-    });
 
     try {
-      const r = await api.putFileVersion(fileId, versionId, ciphertext, nonce.toString('base64url'), config.keyId, rel);
+      const r = await api.putFileVersion(fileId, versionId, content, rel);
       manifest[rel] = { fileId, lastSeq: r.seq, plaintextHashB64: hashB64 };
       lastSeq = Math.max(lastSeq, r.seq);
       pushed++;

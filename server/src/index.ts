@@ -9,9 +9,9 @@ import { registerSecurityHeaders } from './lib/security-headers.js';
 import { registerRateLimits } from './lib/rate-limit.js';
 import { registerGithubAuth, type GithubAuthDeps } from './auth/github.js';
 import { registerEmailAuth } from './auth/email.js';
+import { registerPasswordReset } from './auth/reset.js';
 import { registerRevoke } from './auth/revoke.js';
 import { registerDevices } from './routes/devices.js';
-import { registerVault } from './routes/vault.js';
 import { registerFiles } from './routes/files.js';
 import { registerSync } from './routes/sync.js';
 import { ApiError } from './lib/errors.js';
@@ -64,12 +64,12 @@ export async function buildApp(opts: BuildOpts = {}): Promise<{ app: FastifyInst
   });
 
   registerEmailAuth(app, db);
+  registerPasswordReset(app, db, env);
   if (env.GITHUB_CLIENT_ID && env.GITHUB_CLIENT_SECRET) {
     registerGithubAuth(app, { db, env: env as GithubAuthDeps['env'], ...opts.githubDeps });
   }
   registerRevoke(app, db);
   registerDevices(app, db);
-  registerVault(app, db);
   registerFiles(app, db, env);
   registerSync(app, db);
 

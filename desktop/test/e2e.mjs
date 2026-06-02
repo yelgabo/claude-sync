@@ -10,7 +10,6 @@ import { copyFileSync, existsSync, unlinkSync } from 'node:fs';
 const RUN_ID = Math.random().toString(36).slice(2, 8);
 const EMAIL = process.env.CLAUDE_SYNC_EMAIL ?? `e2e+${RUN_ID}@example.com`;
 const PASSWORD = process.env.CLAUDE_SYNC_PASSWORD ?? 'first-test-passphrase-1234';
-const PASSPHRASE = process.env.CLAUDE_SYNC_PASSPHRASE ?? 'vault-test-passphrase-1234';
 
 const CONFIG_DIR = join(homedir(), '.claude-sync');
 const CONFIG = join(CONFIG_DIR, 'config.json');
@@ -56,7 +55,7 @@ async function run() {
     await win.waitForSelector('#auth-section:not([hidden])', { timeout: 5_000 });
     console.log('Login form visible.');
 
-    // 2. Sign up a fresh user (convenience mode auto-registers device + creates vault)
+    // 2. Sign up a fresh user (auto-registers this device and starts syncing)
     await win.fill('#email', EMAIL);
     await win.fill('#password', PASSWORD);
     await Promise.all([
@@ -65,9 +64,9 @@ async function run() {
     ]);
     console.log('Signed up: ' + EMAIL);
 
-    // 4. Vault: in convenience mode the auth handler auto-unlocks. Just wait for sync section.
+    // 3. App shell appears once the device is registered and sync is running.
     await win.waitForSelector('#app-shell:not([hidden])', { timeout: 30_000 });
-    console.log('Sync section visible (convenience mode auto-unlocked vault).');
+    console.log('App shell visible (device registered, sync running).');
 
     // 5. Sync section should be visible and showing the file list.
     await win.waitForSelector('#app-shell:not([hidden])');

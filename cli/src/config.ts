@@ -7,17 +7,12 @@ export interface Config {
   session?: string;          // __Host-session cookie value
   userId?: string;
   deviceId?: string;
-  // Vault metadata mirror (kdf_salt_b64, key_id are server-known; vault key itself is derived from passphrase locally)
-  kdfAlgo?: 'argon2id';
-  kdfSaltB64?: string;
-  keyId?: string;
   // Local sync root (default ~/.claude); files under here are mirrored.
   syncRoot: string;
   // Sub-paths under syncRoot to include (empty = all). Excludes use prefix match.
   includePrefixes: string[];
   excludePrefixes: string[];
   cursor: number;           // last seen seq from /api/sync
-  convenienceMode: boolean;  // when true, vault key derives from login password (no separate passphrase)
 }
 
 export const CONFIG_DIR = join(homedir(), '.claude-sync');
@@ -45,10 +40,6 @@ const DEFAULT: Config = {
     'mcp-health-cache.json', '.last-cleanup',
   ],
   cursor: 0,
-  // Off by default: when true, the vault key derives from the login password, and
-  // the server sees that password in plaintext during /auth/login — defeating the
-  // E2E guarantee. Users who want the trade-off must opt in.
-  convenienceMode: false,
 };
 
 export async function loadConfig(): Promise<Config> {

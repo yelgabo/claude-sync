@@ -50,7 +50,5 @@ export async function status(): Promise<void> {
     loggedIn: !!config.session,
     userId: config.userId ?? null,
     deviceId: config.deviceId ?? null,
-    vaultInitialized: !!config.keyId,
-    keyId: config.keyId ?? null,
   }, null, 2));
 }

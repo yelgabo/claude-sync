@@ -7,14 +7,13 @@ const { autoUpdater } = pkg;
 import { join } from 'node:path';
 import { hostname } from 'node:os';
 import {
-  Api, ApiError, loadConfig, saveConfig, deriveVaultKey, push as cliPush, pull as cliPull,
-  type Config,
+  Api, loadConfig, saveConfig, push as cliPush, pull as cliPull,
 } from '@claude-sync/cli';
 
 interface AppState {
   win: BrowserWindow | null;
   tray: Tray | null;
-  vaultKey: Buffer | null;          // derived from passphrase, held in memory only
+  running: boolean;                 // sync loop active (logged in + device registered)
   syncTimer: NodeJS.Timeout | null;
   syncing: boolean;
   lastSyncAt: number | null;
@@ -23,15 +22,11 @@ interface AppState {
 }
 
 const state: AppState = {
-  win: null, tray: null, vaultKey: null, syncTimer: null,
+  win: null, tray: null, running: false, syncTimer: null,
   syncing: false, lastSyncAt: null, lastError: null, paused: false,
 };
 
 let syncIntervalMs = 15_000;
-
-async function api(): Promise<Api> {
-  return new Api(await loadConfig());
-}
 
 function broadcast(channel: string, payload: unknown): void {
   for (const w of BrowserWindow.getAllWindows()) w.webContents.send(channel, payload);
@@ -39,7 +34,6 @@ function broadcast(channel: string, payload: unknown): void {
 
 function updateTrayMenu(): void {
   if (!state.tray) return;
-  const loggedIn = state.vaultKey !== null;
   const status = state.syncing
     ? 'Syncing...'
     : state.lastError
@@ -48,12 +42,12 @@ function updateTrayMenu(): void {
         ? `Last sync ${new Date(state.lastSyncAt).toLocaleTimeString()}`
         : 'Idle';
 
-  state.tray.setToolTip(`Claude Sync --'--'--'--'--'--'--'--'--...--'--...--'--'--'--'--...--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--...--'--'--'--'--...--'--'--'--'--'--...--'--'--...--'--'--'--'--'--...--'--'--...--'--'--'--'--'--'--'--'--'--...--'--...--'--'--'--...--'--'--'--'--'--...--'--'--...--'--'--'--'--...--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--...--'--'--'--'--...--'--'--'--'--'--'--'--'--'--...--'--...--'--'--'--'--...--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--...--'--'--'--'--...--'--'--'--'--'--'--'--'--'--...--'--...--'--'--'--'--...--'--'--'--'--...--'--'--'--'--'--'--'--'--...--'--'--'--'--...--'--'--'--'--'--...--'--'--...--'--'--'--'--...--'--'--'--'--'--...--'--'--'--'--...--'--'--'--'--'--'--'--'--'--'--'--...--'--'--'--'--'--...--'--'--'--'--...--'--'--'--'--'--'--'--'--'--...--'--...--'--'--'--...--'--'--'--'--'--...--'--'--...--'--'--'--'--...--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--...--'--'--'--'--...--'--'--'--'--'--'--'--'--'--...--'--...--'--'--'--'--...--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--...--'--'--'--'--...--'--'--'--'--'--'--'--'--'--...--'--...--'--'--'--'--...--'--'--'--'--...--'--'--'--'--'--'--'--'--...--'--'--'--'--...--'--'--'--'--'--'--'--'--'--'--'--...--'--'--'--'--'--...--'--'--'--'--...--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--...--'--'--'--'--...--'--'--'--'--'--'--'--'--'--...--'--...--'--'--'--...--'--'--'--'--'--...--'--'--...--'--'--'--'--...--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--...--'--'--'--'--...--'-- ${status}`);
+  state.tray.setToolTip(`Claude Sync — ${status}`);
   state.tray.setContextMenu(Menu.buildFromTemplate([
     { label: status, enabled: false },
     { type: 'separator' },
     { label: 'Open window', click: () => showWindow() },
-    { label: 'Sync now', enabled: loggedIn && !state.syncing, click: () => { void syncOnce(); } },
+    { label: 'Sync now', enabled: state.running && !state.syncing, click: () => { void syncOnce(); } },
     { type: 'separator' },
     { label: 'Open Railway dashboard', click: () => shell.openExternal('https://claude-sync-production.up.railway.app/healthz') },
     { type: 'separator' },
@@ -80,18 +74,14 @@ function showWindow(): void {
 }
 
 async function syncOnce(): Promise<void> {
-  if (state.syncing || !state.vaultKey) return;
+  if (state.syncing || !state.running || state.paused) return;
   state.syncing = true;
   state.lastError = null;
   updateTrayMenu();
   broadcast('sync-state', { syncing: true });
-  // Get the cleartext passphrase-equivalent: we hold the *derived* key,
-  // but the CLI push/pull APIs take a passphrase. We need to re-derive --'--'--'--'--'--'--'--'--...--'--...--'--'--'--'--...--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--...--'--'--'--'--...--'--'--'--'--'--...--'--'--...--'--'--'--'--'--...--'--'--...--'--'--'--'--'--'--'--'--'--...--'--...--'--'--'--...--'--'--'--'--'--...--'--'--...--'--'--'--'--...--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--...--'--'--'--'--...--'--'--'--'--'--'--'--'--'--...--'--...--'--'--'--'--...--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--...--'--'--'--'--...--'--'--'--'--'--'--'--'--'--...--'--...--'--'--'--'--...--'--'--'--'--...--'--'--'--'--'--'--'--'--...--'--'--'--'--...--'--'--'--'--'--...--'--'--...--'--'--'--'--...--'--'--'--'--'--...--'--'--'--'--...--'--'--'--'--'--'--'--'--'--'--'--...--'--'--'--'--'--...--'--'--'--'--...--'--'--'--'--'--'--'--'--'--...--'--...--'--'--'--...--'--'--'--'--'--...--'--'--...--'--'--'--'--...--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--...--'--'--'--'--...--'--'--'--'--'--'--'--'--'--...--'--...--'--'--'--'--...--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--...--'--'--'--'--...--'--'--'--'--'--'--'--'--'--...--'--...--'--'--'--'--...--'--'--'--'--...--'--'--'--'--'--'--'--'--...--'--'--'--'--...--'--'--'--'--'--'--'--'--'--'--'--...--'--'--'--'--'--...--'--'--'--'--...--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--...--'--'--'--'--...--'--'--'--'--'--'--'--'--'--...--'--...--'--'--'--...--'--'--'--'--'--...--'--'--...--'--'--'--'--...--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--...--'--'--'--'--...--'-- or
-  // refactor to accept a key directly. Easier: store the passphrase and re-derive each call.
-  // (See state.passphrase below --'--'--'--'--'--'--'--'--...--'--...--'--'--'--'--...--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--...--'--'--'--'--...--'--'--'--'--'--...--'--'--...--'--'--'--'--'--...--'--'--...--'--'--'--'--'--'--'--'--'--...--'--...--'--'--'--...--'--'--'--'--'--...--'--'--...--'--'--'--'--...--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--...--'--'--'--'--...--'--'--'--'--'--'--'--'--'--...--'--...--'--'--'--'--...--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--...--'--'--'--'--...--'--'--'--'--'--'--'--'--'--...--'--...--'--'--'--'--...--'--'--'--'--...--'--'--'--'--'--'--'--'--...--'--'--'--'--...--'--'--'--'--'--...--'--'--...--'--'--'--'--...--'--'--'--'--'--...--'--'--'--'--...--'--'--'--'--'--'--'--'--'--'--'--...--'--'--'--'--'--...--'--'--'--'--...--'--'--'--'--'--'--'--'--'--...--'--...--'--'--'--...--'--'--'--'--'--...--'--'--...--'--'--'--'--...--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--...--'--'--'--'--...--'--'--'--'--'--'--'--'--'--...--'--...--'--'--'--'--...--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--...--'--'--'--'--...--'--'--'--'--'--'--'--'--'--...--'--...--'--'--'--'--...--'--'--'--'--...--'--'--'--'--'--'--'--'--...--'--'--'--'--...--'--'--'--'--'--'--'--'--'--'--'--...--'--'--'--'--'--...--'--'--'--'--...--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--...--'--'--'--'--...--'--'--'--'--'--'--'--'--'--...--'--...--'--'--'--...--'--'--'--'--'--...--'--'--...--'--'--'--'--...--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--...--'--'--'--'--...--'-- kept in memory only.)
   try {
-    await cliPull({ passphrase: passphraseRef.value ?? '' });
-    await cliPush({ passphrase: passphraseRef.value ?? '' });
+    await cliPull();
+    await cliPush();
     state.lastSyncAt = Date.now();
   } catch (e) {
     state.lastError = (e as Error).message;
@@ -104,6 +94,7 @@ async function syncOnce(): Promise<void> {
 }
 
 function startSyncLoop(): void {
+  state.running = true;
   if (state.syncTimer) return;
   state.syncTimer = setInterval(() => { void syncOnce(); }, syncIntervalMs);
   void syncOnce();  // immediate first sync
@@ -111,71 +102,23 @@ function startSyncLoop(): void {
 
 function stopSyncLoop(): void {
   if (state.syncTimer) { clearInterval(state.syncTimer); state.syncTimer = null; }
-  state.vaultKey = null;
-  passphraseRef.value = null;
+  state.running = false;
   updateTrayMenu();
 }
 
-// Passphrase reference --'--'--'--'--'--'--'--'--...--'--...--'--'--'--'--...--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--...--'--'--'--'--...--'--'--'--'--'--...--'--'--...--'--'--'--'--'--...--'--'--...--'--'--'--'--'--'--'--'--'--...--'--...--'--'--'--...--'--'--'--'--'--...--'--'--...--'--'--'--'--...--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--...--'--'--'--'--...--'--'--'--'--'--'--'--'--'--...--'--...--'--'--'--'--...--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--...--'--'--'--'--...--'--'--'--'--'--'--'--'--'--...--'--...--'--'--'--'--...--'--'--'--'--...--'--'--'--'--'--'--'--'--...--'--'--'--'--...--'--'--'--'--'--...--'--'--...--'--'--'--'--...--'--'--'--'--'--...--'--'--'--'--...--'--'--'--'--'--'--'--'--'--'--'--...--'--'--'--'--'--...--'--'--'--'--...--'--'--'--'--'--'--'--'--'--...--'--...--'--'--'--...--'--'--'--'--'--...--'--'--...--'--'--'--'--...--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--...--'--'--'--'--...--'--'--'--'--'--'--'--'--'--...--'--...--'--'--'--'--...--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--...--'--'--'--'--...--'--'--'--'--'--'--'--'--'--...--'--...--'--'--'--'--...--'--'--'--'--...--'--'--'--'--'--'--'--'--...--'--'--'--'--...--'--'--'--'--'--'--'--'--'--'--'--...--'--'--'--'--'--...--'--'--'--'--...--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--...--'--'--'--'--...--'--'--'--'--'--'--'--'--'--...--'--...--'--'--'--...--'--'--'--'--'--...--'--'--...--'--'--'--'--...--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--...--'--'--'--'--...--'-- held in module-local closure, never persisted unless `Remember`
-const passphraseRef: { value: string | null } = { value: null };
-
-// === Secure storage of session cookie + remembered passphrase ===
-// safeStorage uses OS keychain (Windows DPAPI). Available after app.ready.
-async function savePassphrase(p: string): Promise<void> {
-  if (!safeStorage.isEncryptionAvailable()) return;
-  const enc = safeStorage.encryptString(p);
+// Ensure this machine is registered as a device, then start syncing. Called after
+// login/signup and on startup when a session already exists.
+async function ensureDeviceAndSync(): Promise<void> {
   const cfg = await loadConfig();
-  (cfg as Config & { rememberedPassphraseB64?: string }).rememberedPassphraseB64 = enc.toString('base64');
-  await saveConfig(cfg as Config);
-}
-
-async function loadRememberedPassphrase(): Promise<string | null> {
-  if (!safeStorage.isEncryptionAvailable()) return null;
-  const cfg = await loadConfig() as Config & { rememberedPassphraseB64?: string };
-  if (!cfg.rememberedPassphraseB64) return null;
-  try {
-    return safeStorage.decryptString(Buffer.from(cfg.rememberedPassphraseB64, 'base64'));
-  } catch { return null; }
-}
-
-async function clearRememberedPassphrase(): Promise<void> {
-  const cfg = await loadConfig() as Config & { rememberedPassphraseB64?: string };
-  delete cfg.rememberedPassphraseB64;
-  await saveConfig(cfg);
-}
-
-// === Convenience-mode auto vault setup ===
-// When config.convenienceMode is true, derive the vault key from the user's login
-// password. Trade-off vs the 1Password-style separate passphrase: the server briefly
-// sees the login password during /auth/login, so a malicious server could derive the
-// same key. Acceptable for the dogfood phase; users can disable convenience mode in
-// Settings to require a separate passphrase.
-async function tryConvenienceUnlock(loginPassword: string): Promise<{ status: 'created' | 'unlocked' | 'skipped' }> {
-  const cfg = await loadConfig();
-  if (!cfg.convenienceMode || !cfg.session) return { status: 'skipped' };
-  const a = new Api(cfg);
-  const existing = await a.getVaultMeta();
-  if (existing) {
-    cfg.kdfAlgo = existing.kdf_algo;
-    cfg.kdfSaltB64 = existing.kdf_salt_b64;
-    cfg.keyId = existing.key_id;
-    await saveConfig(cfg);
-    state.vaultKey = await deriveVaultKey(loginPassword, existing.kdf_salt_b64);
-    passphraseRef.value = loginPassword;
-    return { status: 'unlocked' };
+  if (!cfg.session) return;
+  if (!cfg.deviceId) {
+    const dev = await new Api(cfg).createDevice(hostname());
+    const cfg2 = await loadConfig();
+    cfg2.deviceId = dev.device.id;
+    await saveConfig(cfg2);
   }
-  const { newSalt16 } = await import('@claude-sync/cli');
-  const { randomUUID } = await import('node:crypto');
-  const salt = await newSalt16();
-  const keyId = randomUUID();
-  await a.putVaultMeta({ kdf_algo: 'argon2id', kdf_salt_b64: salt.toString('base64url'), key_id: keyId });
-  cfg.kdfAlgo = 'argon2id';
-  cfg.kdfSaltB64 = salt.toString('base64url');
-  cfg.keyId = keyId;
-  await saveConfig(cfg);
-  state.vaultKey = await deriveVaultKey(loginPassword, salt.toString('base64url'));
-  passphraseRef.value = loginPassword;
-  return { status: 'created' };
+  startSyncLoop();
+  updateTrayMenu();
 }
 
 // === IPC handlers ===
@@ -189,14 +132,11 @@ ipcMain.handle('app:status', async () => {
     loggedIn: !!cfg.session,
     userId: cfg.userId ?? null,
     deviceId: cfg.deviceId ?? null,
-    vaultInitialized: !!cfg.keyId,
-    keyId: cfg.keyId ?? null,
-    unlocked: state.vaultKey !== null,
+    running: state.running,
     syncing: state.syncing,
     lastSyncAt: state.lastSyncAt,
     lastError: state.lastError,
     canRememberSecrets: safeStorage.isEncryptionAvailable(),
-    convenienceMode: cfg.convenienceMode,
     paused: state.paused,
     syncIntervalMs,
   };
@@ -209,20 +149,7 @@ ipcMain.handle('auth:signup', async (_e, args: { email: string; password: string
   cfg.session = sessionCookie;
   cfg.userId = user.id;
   await saveConfig(cfg);
-  // Auto register device + unlock vault when convenience mode is enabled.
-  if (cfg.convenienceMode) {
-    if (!cfg.deviceId) {
-      const dev = await a.createDevice(hostname());
-      const cfg2 = await loadConfig();
-      cfg2.deviceId = dev.device.id;
-      await saveConfig(cfg2);
-    }
-    const r = await tryConvenienceUnlock(args.password);
-    if (r.status === 'created' || r.status === 'unlocked') {
-      startSyncLoop();
-      updateTrayMenu();
-    }
-  }
+  await ensureDeviceAndSync();
   return { user };
 });
 
@@ -233,28 +160,7 @@ ipcMain.handle('auth:login', async (_e, args: { email: string; password: string 
   cfg.session = sessionCookie;
   cfg.userId = user.id;
   await saveConfig(cfg);
-  if (cfg.convenienceMode) {
-    try {
-      console.log('[auth:login] convenience mode on; deviceId=' + cfg.deviceId);
-      if (!cfg.deviceId) {
-        const dev = await a.createDevice(hostname());
-        const cfg2 = await loadConfig();
-        cfg2.deviceId = dev.device.id;
-        await saveConfig(cfg2);
-        console.log('[auth:login] device created id=' + dev.device.id);
-      }
-      const r = await tryConvenienceUnlock(args.password);
-      console.log('[auth:login] convenience unlock status=' + r.status);
-      if (r.status === 'created' || r.status === 'unlocked') {
-        startSyncLoop();
-        updateTrayMenu();
-      }
-    } catch (err) {
-      console.error('[auth:login] convenience block failed:', (err as Error).message, (err as Error).stack);
-    }
-  } else {
-    console.log('[auth:login] convenience mode OFF');
-  }
+  await ensureDeviceAndSync();
   return { user };
 });
 
@@ -265,7 +171,6 @@ ipcMain.handle('auth:logout', async () => {
   delete cfg.deviceId;
   await saveConfig(cfg);
   stopSyncLoop();
-  await clearRememberedPassphrase();
   return { ok: true };
 });
 
@@ -275,60 +180,13 @@ ipcMain.handle('device:register', async (_e, args: { name: string }) => {
   const { device } = await a.createDevice(args.name);
   cfg.deviceId = device.id;
   await saveConfig(cfg);
+  startSyncLoop();
+  updateTrayMenu();
   return { device };
 });
 
-ipcMain.handle('vault:init', async (_e, args: { passphrase: string }) => {
-  const cfg = await loadConfig();
-  if (!cfg.session) throw new Error('not logged in');
-  const a = new Api(cfg);
-  const existing = await a.getVaultMeta();
-  if (existing) {
-    cfg.kdfAlgo = existing.kdf_algo;
-    cfg.kdfSaltB64 = existing.kdf_salt_b64;
-    cfg.keyId = existing.key_id;
-    await saveConfig(cfg);
-    // Try the passphrase against the existing salt; if derivation succeeds we adopt.
-    state.vaultKey = await deriveVaultKey(args.passphrase, existing.kdf_salt_b64);
-    passphraseRef.value = args.passphrase;
-    return { mode: 'adopted', keyId: existing.key_id };
-  }
-  // Create new
-  const { newSalt16 } = await import('@claude-sync/cli');
-  const { randomUUID } = await import('node:crypto');
-  const salt = await newSalt16();
-  const keyId = randomUUID();
-  await a.putVaultMeta({ kdf_algo: 'argon2id', kdf_salt_b64: salt.toString('base64url'), key_id: keyId });
-  cfg.kdfAlgo = 'argon2id';
-  cfg.kdfSaltB64 = salt.toString('base64url');
-  cfg.keyId = keyId;
-  await saveConfig(cfg);
-  state.vaultKey = await deriveVaultKey(args.passphrase, salt.toString('base64url'));
-  passphraseRef.value = args.passphrase;
-  return { mode: 'created', keyId };
-});
-
-ipcMain.handle('vault:unlock', async (_e, args: { passphrase: string; remember: boolean }) => {
-  const cfg = await loadConfig();
-  if (!cfg.session) throw new Error('not logged in');
-  if (!cfg.deviceId) throw new Error('no device registered');
-  if (!cfg.kdfSaltB64 || !cfg.keyId) throw new Error('vault not initialized');
-  state.vaultKey = await deriveVaultKey(args.passphrase, cfg.kdfSaltB64);
-  passphraseRef.value = args.passphrase;
-  if (args.remember) await savePassphrase(args.passphrase);
-  startSyncLoop();
-  updateTrayMenu();
-  return { ok: true };
-});
-
-ipcMain.handle('vault:lock', async () => {
-  stopSyncLoop();
-  await clearRememberedPassphrase();
-  return { ok: true };
-});
-
 ipcMain.handle('sync:now', async () => {
-  if (!state.vaultKey) throw new Error('vault locked');
+  if (!state.running) throw new Error('not syncing (log in first)');
   await syncOnce();
   return { ok: true };
 });
@@ -340,13 +198,12 @@ ipcMain.handle('settings:get', async () => {
     includePrefixes: cfg.includePrefixes,
     excludePrefixes: cfg.excludePrefixes,
     serverUrl: cfg.serverUrl,
-    convenienceMode: cfg.convenienceMode,
     paused: state.paused,
     syncIntervalMs,
   };
 });
 
-ipcMain.handle('settings:set', async (_e, args: { syncRoot?: string; includePrefixes?: string[]; excludePrefixes?: string[]; serverUrl?: string; convenienceMode?: boolean }) => {
+ipcMain.handle('settings:set', async (_e, args: { syncRoot?: string; includePrefixes?: string[]; excludePrefixes?: string[]; serverUrl?: string }) => {
   const cfg = await loadConfig();
   if (args.syncRoot !== undefined) cfg.syncRoot = args.syncRoot;
   if (args.includePrefixes !== undefined) cfg.includePrefixes = args.includePrefixes;
@@ -359,8 +216,6 @@ ipcMain.handle('settings:set', async (_e, args: { syncRoot?: string; includePref
 ipcMain.handle('files:list', async () => {
   const cfg = await loadConfig();
   if (!cfg.session) throw new Error('not logged in');
-  const a = new Api(cfg);
-  // Api doesn't expose a list method; use raw fetch with the cookie.
   const res = await fetch(`${cfg.serverUrl}/api/files`, {
     headers: { 'cookie': `__Host-session=${cfg.session}`, 'x-requested-with': 'claude-sync' },
   });
@@ -411,16 +266,12 @@ ipcMain.handle('activity:recent', async (_e, args: { limit?: number } = {}) => {
   const cfg = await loadConfig();
   if (!cfg.session) throw new Error('not logged in');
   const limit = args.limit ?? 50;
-  // Pull the latest N changes from the sync feed.
-  // We don't paginate here -- just grab last N seqs by querying since=0 with limit and taking the tail.
   const res = await fetch(`${cfg.serverUrl}/api/sync?since=0&limit=500`, {
     headers: { cookie: `__Host-session=${cfg.session}`, 'x-requested-with': 'claude-sync' },
   });
   if (!res.ok) throw new Error(`activity failed: ${res.status}`);
   const body = await res.json() as { changes: Array<{ file_id: string; version_id: string; seq: number; size_bytes: number; deleted: boolean; path: string | null }> };
   const tail = body.changes.slice(-limit).reverse();
-  // Fetch device names once and decorate each change with the version's upload device.
-  // The /api/sync payload doesn't currently expose uploaded_by_device, so we just return what we have.
   return { changes: tail };
 });
 
@@ -435,44 +286,27 @@ ipcMain.handle('files:versions', async (_e, args: { fileId: string }) => {
 });
 
 ipcMain.handle('files:restore', async (_e, args: { fileId: string; versionId: string }) => {
-  // Restore = pull that specific version, decrypt, re-encrypt as a NEW version, push.
-  // Requires the vault key in state.
-  if (!state.vaultKey || !passphraseRef.value) throw new Error('vault locked');
+  // Restore = fetch that version's content and re-upload it as a NEW version.
   const cfg = await loadConfig();
-  if (!cfg.session || !cfg.userId || !cfg.deviceId || !cfg.keyId) throw new Error('not ready');
-  const { aeadDecrypt, aeadEncrypt } = await import('@claude-sync/cli');
+  if (!cfg.session || !cfg.deviceId) throw new Error('not ready');
   const { randomUUID } = await import('node:crypto');
 
   const verRes = await fetch(`${cfg.serverUrl}/api/files/${args.fileId}/versions/${args.versionId}`, {
     headers: { cookie: `__Host-session=${cfg.session}`, 'x-requested-with': 'claude-sync' },
   });
   if (!verRes.ok) throw new Error(`restore: get version failed ${verRes.status}`);
-  const ciphertext = Buffer.from(await verRes.arrayBuffer());
-  const nonceB64 = verRes.headers.get('x-nonce') ?? '';
-  const keyId = verRes.headers.get('x-key-id') ?? '';
   if (verRes.headers.get('x-deleted') === 'true') throw new Error('cannot restore a tombstone');
-
-  const plaintext = await aeadDecrypt({
-    key: state.vaultKey, ciphertext, nonce: Buffer.from(nonceB64, 'base64url'),
-    userId: cfg.userId, fileId: args.fileId, versionId: args.versionId, keyId,
-  });
+  const content = Buffer.from(await verRes.arrayBuffer());
 
   const newVersionId = randomUUID();
-  const enc = await aeadEncrypt({
-    key: state.vaultKey, plaintext,
-    userId: cfg.userId, fileId: args.fileId, versionId: newVersionId, keyId: cfg.keyId,
-  });
-
   const putRes = await fetch(`${cfg.serverUrl}/api/files/${args.fileId}/versions/${newVersionId}`, {
     method: 'PUT',
     headers: {
       cookie: `__Host-session=${cfg.session}`,
       'x-requested-with': 'claude-sync',
       'content-type': 'application/octet-stream',
-      'x-nonce': enc.nonce.toString('base64url'),
-      'x-key-id': cfg.keyId,
     },
-    body: enc.ciphertext as unknown as undefined,
+    body: content as unknown as undefined,
   });
   if (!putRes.ok) throw new Error(`restore: put failed ${putRes.status}`);
   return putRes.json();
@@ -489,7 +323,7 @@ ipcMain.handle('sync:setInterval', async (_e, args: { seconds: number }) => {
   const n = Math.max(5, Math.min(3600, Math.floor(args.seconds)));
   syncIntervalMs = n * 1000;
   if (state.syncTimer) { clearInterval(state.syncTimer); state.syncTimer = null; }
-  if (state.vaultKey) startSyncLoop();
+  if (state.running) startSyncLoop();
   return { ok: true, intervalMs: syncIntervalMs };
 });
 
@@ -501,7 +335,6 @@ app.whenReady().then(async () => {
     autoUpdater.checkForUpdatesAndNotify().catch(() => {});
     setInterval(() => autoUpdater.checkForUpdatesAndNotify().catch(() => {}), 60 * 60 * 1000);
   }
-  // Tray icon: use a 16x16 empty PNG as placeholder; user can ship a proper one later.
   // Build a 16x16 template icon: a simple black filled circle. macOS uses it as a
   // template (auto-inverts for light/dark menu bars); Windows shows it as a flat icon.
   const SIZE = 16;
@@ -526,18 +359,13 @@ app.whenReady().then(async () => {
   updateTrayMenu();
   state.tray.on('click', () => showWindow());
 
-  // Try auto-unlock with remembered passphrase
+  // Resume syncing automatically if a session already exists.
   try {
     const cfg = await loadConfig();
-    if (cfg.session && cfg.deviceId && cfg.kdfSaltB64) {
-      const remembered = await loadRememberedPassphrase();
-      if (remembered) {
-        state.vaultKey = await deriveVaultKey(remembered, cfg.kdfSaltB64);
-        passphraseRef.value = remembered;
-        startSyncLoop();
-        updateTrayMenu();
-        new Notification({ title: 'Claude Sync', body: 'Auto-unlocked; sync running in the background.' }).show();
-      }
+    if (cfg.session && cfg.deviceId) {
+      startSyncLoop();
+      updateTrayMenu();
+      new Notification({ title: 'Claude Sync', body: 'Sync running in the background.' }).show();
     }
   } catch (e) {
     state.lastError = (e as Error).message;
@@ -546,6 +374,5 @@ app.whenReady().then(async () => {
   showWindow();
 });
 
-// Don't quit when window closes --'--'--'--'--'--'--'--'--...--'--...--'--'--'--'--...--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--...--'--'--'--'--...--'--'--'--'--'--...--'--'--...--'--'--'--'--'--...--'--'--...--'--'--'--'--'--'--'--'--'--...--'--...--'--'--'--...--'--'--'--'--'--...--'--'--...--'--'--'--'--...--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--...--'--'--'--'--...--'--'--'--'--'--'--'--'--'--...--'--...--'--'--'--'--...--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--...--'--'--'--'--...--'--'--'--'--'--'--'--'--'--...--'--...--'--'--'--'--...--'--'--'--'--...--'--'--'--'--'--'--'--'--...--'--'--'--'--...--'--'--'--'--'--...--'--'--...--'--'--'--'--...--'--'--'--'--'--...--'--'--'--'--...--'--'--'--'--'--'--'--'--'--'--'--...--'--'--'--'--'--...--'--'--'--'--...--'--'--'--'--'--'--'--'--'--...--'--...--'--'--'--...--'--'--'--'--'--...--'--'--...--'--'--'--'--...--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--...--'--'--'--'--...--'--'--'--'--'--'--'--'--'--...--'--...--'--'--'--'--...--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--...--'--'--'--'--...--'--'--'--'--'--'--'--'--'--...--'--...--'--'--'--'--...--'--'--'--'--...--'--'--'--'--'--'--'--'--...--'--'--'--'--...--'--'--'--'--'--'--'--'--'--'--'--...--'--'--'--'--'--...--'--'--'--'--...--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--...--'--'--'--'--...--'--'--'--'--'--'--'--'--'--...--'--...--'--'--'--...--'--'--'--'--'--...--'--'--...--'--'--'--'--...--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--'--...--'--'--'--'--...--'-- stay in tray.
 // Stay alive in the tray after all windows close (do not call app.quit()).
 app.on('window-all-closed', () => { /* no-op: tray keeps us alive */ });

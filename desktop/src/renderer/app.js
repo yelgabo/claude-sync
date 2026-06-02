@@ -4,7 +4,6 @@ const show = (el, on) => { if (el) el.hidden = !on; };
 
 const authSection = $('auth-section');
 const deviceSection = $('device-section');
-const vaultSection = $('vault-section');
 const appShell = $('app-shell');
 const statusPill = $('status-pill');
 
@@ -22,33 +21,19 @@ async function refresh() {
   catch { setStatus('error', 'err'); return; }
   lastStatus = st;
 
+  const ready = st.loggedIn && st.deviceId;
   show(authSection, !st.loggedIn);
-  show(deviceSection, st.loggedIn && !st.deviceId && !st.convenienceMode);
-  show(vaultSection, st.loggedIn && st.deviceId && !st.unlocked && !st.convenienceMode);
-  show(appShell, st.unlocked);
+  show(deviceSection, st.loggedIn && !st.deviceId);
+  show(appShell, ready);
 
   if (!st.loggedIn) setStatus('signed out', '');
   else if (!st.deviceId) setStatus('register device', 'warn');
-  else if (!st.vaultInitialized) setStatus('init vault', 'warn');
-  else if (!st.unlocked) setStatus('locked', 'warn');
   else if (st.paused) setStatus('paused', 'warn');
   else if (st.syncing) setStatus('syncing', 'ok');
   else if (st.lastError) setStatus('sync error', 'err');
   else setStatus('synced', 'ok');
 
-  if (st.loggedIn && st.deviceId && !st.convenienceMode) {
-    if (!st.vaultInitialized) {
-      $('vault-title').textContent = 'Initialize vault';
-      $('vault-help').textContent = 'Choose a passphrase. End-to-end encrypts your files; the server never sees this passphrase or the derived key.';
-      $('vault-btn').textContent = 'Create vault';
-    } else {
-      $('vault-title').textContent = 'Unlock vault';
-      $('vault-help').textContent = 'Enter the passphrase you used to initialize the vault.';
-      $('vault-btn').textContent = 'Unlock';
-    }
-  }
-
-  if (st.unlocked) {
+  if (ready) {
     updateSyncStatus(st);
     $('pause-btn').textContent = st.paused ? 'Resume' : 'Pause';
     // Refresh whichever tab is active
@@ -237,7 +222,6 @@ async function refreshSettings() {
   const s = await claudeSync.getSettings();
   $('sync-root').textContent = s.syncRoot;
   $('server-url').textContent = s.serverUrl;
-  $('convenience-mode').checked = !!s.convenienceMode;
   $('sync-interval').value = Math.round((lastStatus.syncIntervalMs ?? 15000) / 1000);
   renderChipList('includes-list', s.includePrefixes || [], 'includePrefixes');
   renderChipList('excludes-list', s.excludePrefixes || [], 'excludePrefixes');
@@ -274,10 +258,6 @@ $('includes-add-btn').addEventListener('click', () => addPrefix('includes-add', 
 $('excludes-add-btn').addEventListener('click', () => addPrefix('excludes-add', 'excludePrefixes'));
 
 document.addEventListener('change', async (ev) => {
-  if (ev.target.id === 'convenience-mode') {
-    await claudeSync.setSettings({ convenienceMode: ev.target.checked });
-    await refresh();
-  }
   if (ev.target.id === 'sync-interval') {
     const sec = Number(ev.target.value);
     if (sec >= 5 && sec <= 3600) {
@@ -315,19 +295,6 @@ $('device-form').addEventListener('submit', async (e) => {
   catch (err) { $('device-err').textContent = err.message; }
 });
 $('device-name').value = (navigator.userAgent.match(/Windows NT[^)]*/) || ['Windows'])[0];
-
-$('vault-form').addEventListener('submit', async (e) => {
-  e.preventDefault();
-  $('vault-err').textContent = '';
-  const p = $('vault-passphrase').value, remember = $('vault-remember').checked;
-  try {
-    const st = await claudeSync.status();
-    if (!st.vaultInitialized) { await claudeSync.vaultInit(p); await claudeSync.vaultUnlock(p, remember); }
-    else { await claudeSync.vaultUnlock(p, remember); }
-    $('vault-passphrase').value = '';
-    await refresh();
-  } catch (err) { $('vault-err').textContent = err.message; }
-});
 
 $('sync-now-btn').addEventListener('click', async () => {
   $('sync-now-btn').disabled = true;

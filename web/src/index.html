@@ -18,13 +18,14 @@
     <!-- AUTH -->
     <section id="auth" class="card" hidden>
       <h2>Sign in</h2>
-      <p class="hint">Use the same email + password you use in the desktop app. Files stay end-to-end encrypted -- your password derives a vault key here, in your browser, that the server never sees.</p>
+      <p class="hint">Use the same email + password you use in the desktop app. Browse your synced files and version history.</p>
       <form id="auth-form" autocomplete="on">
         <label>Email <input type="email" id="email" name="email" autocomplete="email" required /></label>
         <label>Password <input type="password" id="password" name="password" autocomplete="current-password" required minlength="12" /></label>
         <button type="submit">Sign in</button>
         <p class="err" id="auth-err"></p>
       </form>
+      <p class="hint"><a href="/reset.html">Forgot your password?</a></p>
     </section>
 
     <!-- APP shell with tabs -->

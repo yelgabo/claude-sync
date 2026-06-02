@@ -7,8 +7,7 @@ import { ApiError } from '../lib/errors.js';
 import { allocateSeq, ensureUserSeqRow } from '../lib/seq.js';
 import { canonicalizePath } from '../lib/path-canon.js';
 
-const MAX_CIPHERTEXT = 1024 * 1024; // 1 MiB
-const POLY1305_TAG = 16; // minimum valid AEAD ciphertext length
+const MAX_CONTENT = 1024 * 1024; // 1 MiB
 
 interface FileParams { fileId: string }
 interface VersionParams { fileId: string; versionId: string }
@@ -24,12 +23,6 @@ function requireDeviceBound(req: FastifyRequest): string {
   return d;
 }
 
-function decodeBase64Url(s: string | undefined, label: string): Buffer {
-  if (typeof s !== 'string' || s.length === 0) throw new ApiError('invalid_request', `${label} missing`);
-  if (!/^[A-Za-z0-9_-]+$/.test(s)) throw new ApiError('invalid_request', `${label} not base64url`);
-  return Buffer.from(s, 'base64url');
-}
-
 // Shared ownership/existence check. Returns true if (fileId, userId) exists
 // (creates row implicitly is NOT this helper's job — caller decides).
 // Uniform "not found" semantics: foreign file_id returns false, not throws.
@@ -39,17 +32,15 @@ async function fileExistsForUser(tx: DbClient, fileId: string, userId: string): 
   return { exists: true, foreign: r.rows[0]!.user_id !== userId };
 }
 
-// SECURITY: the server never decrypts. AAD integrity (binding ciphertext to
-// user/file/version/key) is verified by the *reading* client. The server's job
-// is to (a) validate inputs, (b) reject obvious garbage (length, uuid version),
-// and (c) keep ciphertext byte-identical end-to-end.
+// File content is stored as plaintext. The server's job is to (a) validate inputs,
+// (b) enforce the size cap and per-user quota, and (c) keep bytes identical end-to-end.
 
 export function registerFiles(app: FastifyInstance, db: DbClient, env: Env): void {
   const session = makeSessionMiddleware(db);
 
   app.addContentTypeParser(
     'application/octet-stream',
-    { parseAs: 'buffer', bodyLimit: MAX_CIPHERTEXT + 1024 },
+    { parseAs: 'buffer', bodyLimit: MAX_CONTENT + 1024 },
     (_req, body, done) => done(null, body),
   );
 
@@ -91,21 +82,8 @@ export function registerFiles(app: FastifyInstance, db: DbClient, env: Env): voi
     requireUuid(req.params.versionId, 4, 'versionId');
     const deviceId = requireDeviceBound(req);
 
-    const ciphertext = (req.body as Buffer | undefined) ?? Buffer.alloc(0);
-    if (ciphertext.length > MAX_CIPHERTEXT) throw new ApiError('too_large', 'ciphertext exceeds 1 MiB');
-    // Even tombstones must carry an AEAD over empty plaintext → at least the Poly1305 tag.
-    if (ciphertext.length < POLY1305_TAG) {
-      throw new ApiError('invalid_request', `ciphertext too short (need >= ${POLY1305_TAG} bytes for AEAD tag)`);
-    }
-
-    const nonce = decodeBase64Url(req.headers['x-nonce'] as string | undefined, 'X-Nonce');
-    if (nonce.length !== 24) throw new ApiError('invalid_request', 'X-Nonce must decode to 24 bytes');
-
-    const keyIdRaw = req.headers['x-key-id'];
-    if (typeof keyIdRaw !== 'string' || !uuidValidate(keyIdRaw)) {
-      throw new ApiError('invalid_request', 'X-Key-Id must be a uuid');
-    }
-    const keyId = keyIdRaw;
+    const content = (req.body as Buffer | undefined) ?? Buffer.alloc(0);
+    if (content.length > MAX_CONTENT) throw new ApiError('too_large', 'content exceeds 1 MiB');
 
     let canonPath: string | null = null;
     const xPath = req.headers['x-path'];
@@ -117,15 +95,6 @@ export function registerFiles(app: FastifyInstance, db: DbClient, env: Env): voi
     await ensureUserSeqRow(db, req.user!.id);
 
     return db.transaction(async (tx) => {
-      // Verify key matches a registered vault key for this user — INSIDE the tx so
-      // a concurrent key-metadata write can't TOCTOU us.
-      const vk = await tx.query<{ key_id: string }>(
-        `SELECT key_id FROM vault_key_metadata WHERE user_id = $1`, [req.user!.id],
-      );
-      if (vk.rows.length === 0 || vk.rows[0]!.key_id !== keyId) {
-        throw new ApiError('invalid_request', 'X-Key-Id does not match registered vault key');
-      }
-
       const ownership = await fileExistsForUser(tx, req.params.fileId, req.user!.id);
       if (!ownership.exists) {
         if (opts.deleted) throw new ApiError('not_found', 'file not found');
@@ -167,7 +136,7 @@ export function registerFiles(app: FastifyInstance, db: DbClient, env: Env): voi
           [req.user!.id],
         );
         const cur = Number(liveBytes.rows[0]!.sum ?? 0);
-        if (cur + ciphertext.length > env.STORAGE_QUOTA_BYTES) {
+        if (cur + content.length > env.STORAGE_QUOTA_BYTES) {
           throw new ApiError('quota_exceeded', 'per-user storage quota exceeded');
         }
       }
@@ -176,12 +145,12 @@ export function registerFiles(app: FastifyInstance, db: DbClient, env: Env): voi
       try {
         ins = await tx.query<{ uploaded_at: Date }>(
           `INSERT INTO file_versions
-             (id, file_id, user_id, seq, ciphertext, nonce, size_bytes, deleted, key_id, uploaded_by_device)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+             (id, file_id, user_id, seq, ciphertext, size_bytes, deleted, uploaded_by_device)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
            RETURNING uploaded_at`,
           [
             req.params.versionId, req.params.fileId, req.user!.id, seq,
-            ciphertext, nonce, ciphertext.length, opts.deleted, keyId, deviceId,
+            content, content.length, opts.deleted, deviceId,
           ],
         );
       } catch (e) {
@@ -212,14 +181,14 @@ export function registerFiles(app: FastifyInstance, db: DbClient, env: Env): voi
     async (req) => uploadVersion(req, { deleted: true }),
   );
 
-  // GET latest version's ciphertext
+  // GET latest version's content
   app.get<{ Params: FileParams }>('/api/files/:fileId', { preHandler: session }, async (req, reply) => {
     requireUuid(req.params.fileId, 7, 'fileId');
     const r = await db.query<{
-      id: string; ciphertext: Buffer; nonce: Buffer; key_id: string; seq: string | number;
+      id: string; ciphertext: Buffer; seq: string | number;
       deleted: boolean; uploaded_at: Date;
     }>(
-      `SELECT v.id, v.ciphertext, v.nonce, v.key_id, v.seq, v.deleted, v.uploaded_at
+      `SELECT v.id, v.ciphertext, v.seq, v.deleted, v.uploaded_at
        FROM files f JOIN file_versions v ON v.file_id = f.id
        WHERE f.id = $1 AND f.user_id = $2
        ORDER BY v.seq DESC LIMIT 1`,
@@ -234,8 +203,6 @@ export function registerFiles(app: FastifyInstance, db: DbClient, env: Env): voi
     reply
       .header('Content-Type', 'application/octet-stream')
       .header('X-Version-Id', v.id)
-      .header('X-Nonce', v.nonce.toString('base64url'))
-      .header('X-Key-Id', v.key_id)
       .header('X-Seq', String(Number(v.seq)));
     return reply.send(v.ciphertext);
   });
@@ -244,9 +211,9 @@ export function registerFiles(app: FastifyInstance, db: DbClient, env: Env): voi
     requireUuid(req.params.fileId, 7, 'fileId');
     const r = await db.query<{
       id: string; seq: string | number; uploaded_at: Date; size_bytes: number;
-      uploaded_by_device: string | null; deleted: boolean; key_id: string;
+      uploaded_by_device: string | null; deleted: boolean;
     }>(
-      `SELECT v.id, v.seq, v.uploaded_at, v.size_bytes, v.uploaded_by_device, v.deleted, v.key_id
+      `SELECT v.id, v.seq, v.uploaded_at, v.size_bytes, v.uploaded_by_device, v.deleted
        FROM files f JOIN file_versions v ON v.file_id = f.id
        WHERE f.id = $1 AND f.user_id = $2
        ORDER BY v.seq DESC`,
@@ -260,9 +227,9 @@ export function registerFiles(app: FastifyInstance, db: DbClient, env: Env): voi
     requireUuid(req.params.fileId, 7, 'fileId');
     requireUuid(req.params.versionId, 4, 'versionId');
     const r = await db.query<{
-      ciphertext: Buffer; nonce: Buffer; key_id: string; deleted: boolean; uploaded_at: Date; seq: string | number;
+      ciphertext: Buffer; deleted: boolean; uploaded_at: Date; seq: string | number;
     }>(
-      `SELECT v.ciphertext, v.nonce, v.key_id, v.deleted, v.uploaded_at, v.seq
+      `SELECT v.ciphertext, v.deleted, v.uploaded_at, v.seq
        FROM files f JOIN file_versions v ON v.file_id = f.id
        WHERE f.id = $1 AND f.user_id = $2 AND v.id = $3 LIMIT 1`,
       [req.params.fileId, req.user!.id, req.params.versionId],
@@ -272,8 +239,6 @@ export function registerFiles(app: FastifyInstance, db: DbClient, env: Env): voi
     reply
       .header('Content-Type', 'application/octet-stream')
       .header('X-Version-Id', req.params.versionId)
-      .header('X-Nonce', v.nonce.toString('base64url'))
-      .header('X-Key-Id', v.key_id)
       .header('X-Seq', String(Number(v.seq)))
       .header('X-Deleted', v.deleted ? 'true' : 'false');
     return reply.send(v.ciphertext);

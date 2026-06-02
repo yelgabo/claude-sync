@@ -1,6 +1,5 @@
 import { signup, login, logout, status } from './commands/auth.js';
 import { registerDevice } from './commands/device.js';
-import { vaultInit, vaultAdopt } from './commands/vault.js';
 import { push } from './commands/push.js';
 import { pull } from './commands/pull.js';
 import { watch } from './commands/watch.js';
@@ -19,10 +18,6 @@ AUTH
 DEVICE
   device [name]        Register this machine (defaults to hostname)
 
-VAULT
-  vault-init           Generate a new vault key (prompts for passphrase)
-  vault-adopt          Adopt existing server-stored vault metadata (use on a new device)
-
 SYNC
   push                 Upload all eligible files under ~/.claude
   pull                 Download changes since last cursor
@@ -40,8 +35,6 @@ async function main(): Promise<void> {
     case 'logout': await logout(); break;
     case 'status': await status(); break;
     case 'device': await registerDevice(rest[0]); break;
-    case 'vault-init': await vaultInit(); break;
-    case 'vault-adopt': await vaultAdopt(); break;
     case 'push': await push(); break;
     case 'pull': await pull(); break;
     case 'watch': await watch(rest[0] ? Number(rest[0]) : 10); break;

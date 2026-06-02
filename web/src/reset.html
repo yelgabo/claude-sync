@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'; object-src 'none'; frame-ancestors 'none'" />
+  <meta name="referrer" content="strict-origin-when-cross-origin" />
+  <title>Reset password — Claude Sync</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header>
+    <h1>Claude Sync</h1>
+    <div id="status-pill" class="pill">reset password</div>
+  </header>
+
+  <main>
+    <!-- Step 1: request a link (shown when no ?token= in the URL) -->
+    <section id="request-card" class="card" hidden>
+      <h2>Reset your password</h2>
+      <p class="hint">Enter your account email. If it exists, we'll send a reset link.</p>
+      <form id="request-form">
+        <label>Email <input type="email" id="req-email" required autocomplete="email" /></label>
+        <button type="submit">Send reset link</button>
+        <p class="err" id="req-err"></p>
+        <p class="ok" id="req-ok" hidden></p>
+      </form>
+      <p class="hint"><a href="/">Back to sign in</a></p>
+    </section>
+
+    <!-- Step 2: set a new password (shown when ?token= is present) -->
+    <section id="confirm-card" class="card" hidden>
+      <h2>Choose a new password</h2>
+      <p class="hint">Pick a new password (at least 12 characters). All your sessions will be signed out.</p>
+      <form id="confirm-form">
+        <label>New password <input type="password" id="new-password" required minlength="12" autocomplete="new-password" /></label>
+        <label>Confirm <input type="password" id="new-password2" required minlength="12" autocomplete="new-password" /></label>
+        <button type="submit">Set new password</button>
+        <p class="err" id="confirm-err"></p>
+        <p class="ok" id="confirm-ok" hidden>Password updated. <a href="/">Sign in</a></p>
+      </form>
+    </section>
+  </main>
+
+  <script type="module" src="./reset.ts"></script>
+</body>
+</html>

@@ -1,17 +1,16 @@
 import * as api from './api.js';
 import { diffLines } from 'diff';
-import { deriveVaultKey, aeadDecrypt, b64urlToBytes, bytesToBlob } from './crypto.js';
+import { bytesToBlob } from './crypto.js';
 
 interface State {
   userId: string | null;
   email: string | null;
-  vaultKey: Uint8Array | null;
   files: api.FileEntry[];
   selectedFile: api.FileEntry | null;
 }
 
 const state: State = {
-  userId: null, email: null, vaultKey: null, files: [], selectedFile: null,
+  userId: null, email: null, files: [], selectedFile: null,
 };
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string): T =>
@@ -36,9 +35,7 @@ async function boot(): Promise<void> {
     const me = await api.me();
     state.userId = me.user.id;
     state.email = me.user.email;
-    // Session is alive but we still need the vault key -- that requires the password.
-    // Prompt for it (using a passphrase-only sign-in flow).
-    showPassphrasePrompt(me.user.email);
+    showAppShell();
   } catch {
     showAuth();
   }
@@ -54,89 +51,24 @@ function showAppShell(): void {
   show($('auth'), false);
   show($('app-shell'), true);
   $('who').textContent = state.email ?? '';
-  setStatus('unlocked', 'ok');
+  setStatus('signed in', 'ok');
   refreshActiveTab();
 }
 
-// When we have a valid session cookie but no vault key (refresh / fresh browser),
-// re-prompt for password only -- it derives the key locally; nothing is sent to server.
-function showPassphrasePrompt(email: string): void {
-  const emailInput = $<HTMLInputElement>('email');
-  emailInput.value = email;
-  emailInput.readOnly = true;
-  const authSection = $('auth');
-  const h2 = authSection.querySelector('h2');
-  if (h2) h2.textContent = 'Welcome back';
-  const hint = authSection.querySelector('.hint');
-  if (hint) hint.textContent = `Signed in as ${email}. Re-enter your password to derive the encryption key in your browser. The password is never sent during this step.`;
-  show(authSection, true);
-  show($('app-shell'), false);
-  // Override the submit handler to skip the network call and just derive the key.
-  const form = $('auth-form') as HTMLFormElement;
-  const newForm = form.cloneNode(true) as HTMLFormElement;
-  form.replaceWith(newForm);
-  newForm.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    $('auth-err').textContent = '';
-    const pwInput = $<HTMLInputElement>('password');
-    const password = pwInput.value;
-    // Clear the input before any await so the password isn't recoverable from the
-    // DOM later (devtools, future XSS, accidental form re-render).
-    pwInput.value = '';
-    try {
-      await unlockVault(password);
-      showAppShell();
-    } catch (err) {
-      $('auth-err').textContent = (err as Error).message;
-    }
-  });
-}
-
-async function unlockVault(password: string): Promise<void> {
-  const meta = await api.getVaultMeta();
-  if (!meta) throw new Error('No vault initialized for this account. Use the desktop app first.');
-  setStatus('deriving key...', 'warn');
-  state.vaultKey = deriveVaultKey(password, meta.kdf_salt_b64);
-  // Verify by trying to decrypt the latest version of any one file (if any exist).
-  const { files } = await api.listFiles();
-  state.files = files;
-  if (files.length > 0) {
-    const f = files.find((x) => !x.deleted) ?? files[0];
-    if (f) {
-      try {
-        const v = await api.fetchVersion(f.file_id, f.latest_version_id);
-        aeadDecrypt({
-          key: state.vaultKey,
-          ciphertext: v.ciphertext,
-          nonce: b64urlToBytes(v.nonceB64),
-          userId: state.userId!,
-          fileId: f.file_id,
-          versionId: f.latest_version_id,
-          keyId: v.keyId,
-        });
-      } catch {
-        throw new Error('Could not decrypt with that password. Are you in convenience mode? If you set a separate vault passphrase, use that instead.');
-      }
-    }
-  }
-}
-
-// === Login flow (no session yet) ===
+// === Login flow ===
 $('auth-form').addEventListener('submit', async (e) => {
   e.preventDefault();
   $('auth-err').textContent = '';
   const email = ($('email') as HTMLInputElement).value;
   const pwInput = $<HTMLInputElement>('password');
   const password = pwInput.value;
-  // Wipe before any network call so the input never holds the password longer
-  // than the synchronous handler. Local `password` binding is GC'd after derivation.
+  // Wipe before any network call so the input never holds the password longer than needed.
   pwInput.value = '';
   try {
     setStatus('signing in...', 'warn');
     const r = await api.login(email, password);
     state.userId = r.user.id;
     state.email = r.user.email;
-    await unlockVault(password);
     showAppShell();
   } catch (err) {
     $('auth-err').textContent = (err as Error).message;
@@ -242,19 +174,9 @@ async function openVersionsDrawer(file: api.FileEntry): Promise<void> {
 $('versions-close').addEventListener('click', () => { $('versions-drawer').hidden = true; });
 
 async function downloadVersion(file: api.FileEntry, ver: api.VersionEntry): Promise<void> {
-  if (!state.vaultKey || !state.userId) throw new Error('vault locked');
   const v = await api.fetchVersion(file.file_id, ver.id);
-  const plaintext = aeadDecrypt({
-    key: state.vaultKey,
-    ciphertext: v.ciphertext,
-    nonce: b64urlToBytes(v.nonceB64),
-    userId: state.userId,
-    fileId: file.file_id,
-    versionId: ver.id,
-    keyId: v.keyId,
-  });
   const filename = (file.path ?? file.file_id).split('/').pop() ?? 'file';
-  const url = URL.createObjectURL(bytesToBlob(plaintext));
+  const url = URL.createObjectURL(bytesToBlob(v.content));
   const a = document.createElement('a');
   a.href = url; a.download = filename;
   document.body.appendChild(a); a.click(); a.remove();
@@ -300,36 +222,29 @@ async function refreshDevices(): Promise<void> {
 $('logout-btn').addEventListener('click', async () => {
   if (!confirm('Log out?')) return;
   try { await api.logout(); } catch {}
-  state.userId = null; state.email = null; state.vaultKey = null;
+  state.userId = null; state.email = null;
   showAuth();
 });
 
 boot();
 // === DIFF VIEW (web app) ===
 async function openDiff(file: api.FileEntry, older: api.VersionEntry): Promise<void> {
-  if (!state.vaultKey || !state.userId) throw new Error('vault locked');
   const drawer = $('diff-view');
   drawer.hidden = false;
   $('diff-label').textContent = `seq ${older.seq} vs latest (seq ${file.latest_seq})`;
   const content = $('diff-content');
-  content.innerHTML = 'Decrypting both versions...';
+  content.innerHTML = 'Loading both versions...';
 
   try {
     const [olderV, latestV] = await Promise.all([
       api.fetchVersion(file.file_id, older.id),
       api.fetchVersion(file.file_id, file.latest_version_id),
     ]);
-    const olderText = decoderText(aeadDecrypt({
-      key: state.vaultKey, ciphertext: olderV.ciphertext, nonce: b64urlToBytes(olderV.nonceB64),
-      userId: state.userId, fileId: file.file_id, versionId: older.id, keyId: olderV.keyId,
-    }));
-    const latestText = decoderText(aeadDecrypt({
-      key: state.vaultKey, ciphertext: latestV.ciphertext, nonce: b64urlToBytes(latestV.nonceB64),
-      userId: state.userId, fileId: file.file_id, versionId: file.latest_version_id, keyId: latestV.keyId,
-    }));
+    const olderText = decoderText(olderV.content);
+    const latestText = decoderText(latestV.content);
     renderDiff(content, olderText, latestText);
   } catch (e) {
-    content.textContent = `Cannot diff: ${(e as Error).message} (binary file or wrong key)`;
+    content.textContent = `Cannot diff: ${(e as Error).message} (binary file?)`;
   }
 }
 

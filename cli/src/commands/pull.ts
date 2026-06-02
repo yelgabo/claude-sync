@@ -3,15 +3,11 @@ import { existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { Api } from '../api.js';
 import { loadConfig, saveConfig, loadManifest, saveManifest } from '../config.js';
-import { aeadDecrypt, blake2b, deriveVaultKey } from '../crypto.js';
-import { getPassphrase } from '../prompt.js';
+import { blake2b } from '../crypto.js';
 
-export async function pull(opts: { passphrase?: string } = {}): Promise<void> {
+export async function pull(): Promise<void> {
   const config = await loadConfig();
   if (!config.session) throw new Error('not logged in');
-  if (!config.keyId || !config.kdfSaltB64 || !config.userId) throw new Error('vault not initialized');
-  const passphrase = opts.passphrase ?? await getPassphrase();
-  const key = await deriveVaultKey(passphrase, config.kdfSaltB64);
 
   const api = new Api(config);
   const manifest = await loadManifest();
@@ -69,10 +65,7 @@ export async function pull(opts: { passphrase?: string } = {}): Promise<void> {
 
       const got = await api.getLatest(c.file_id);
       if ('gone' in got) continue;
-      const plaintext = await aeadDecrypt({
-        key, ciphertext: got.ciphertext, nonce: Buffer.from(got.nonceB64, 'base64url'),
-        userId: config.userId, fileId: c.file_id, versionId: got.versionId, keyId: got.keyId,
-      });
+      const plaintext = got.content;
 
       if (existsSync(abs)) {
         const local = await readFile(abs);

@@ -43,12 +43,6 @@ export async function me(): Promise<{ user: { id: string; email: string }; devic
   return jsonOrThrow(await req('/api/me'));
 }
 
-export async function getVaultMeta(): Promise<{ kdf_algo: 'argon2id'; kdf_salt_b64: string; key_id: string } | null> {
-  const res = await req('/api/vault/key-metadata');
-  if (res.status === 404) return null;
-  return jsonOrThrow(res);
-}
-
 export interface FileEntry {
   file_id: string;
   path: string | null;
@@ -69,7 +63,6 @@ export interface VersionEntry {
   uploaded_at: string;
   size_bytes: number;
   deleted: boolean;
-  key_id: string;
   uploaded_by_device: string | null;
 }
 
@@ -78,16 +71,12 @@ export async function listVersions(fileId: string): Promise<{ versions: VersionE
 }
 
 export async function fetchVersion(fileId: string, versionId: string): Promise<{
-  ciphertext: Uint8Array; nonceB64: string; keyId: string;
+  content: Uint8Array;
 }> {
   const res = await req(`/api/files/${fileId}/versions/${versionId}`);
   if (!res.ok) throw new ApiError(res.status, 'fetch_failed', await res.text());
   const buf = new Uint8Array(await res.arrayBuffer());
-  return {
-    ciphertext: buf,
-    nonceB64: res.headers.get('x-nonce') ?? '',
-    keyId: res.headers.get('x-key-id') ?? '',
-  };
+  return { content: buf };
 }
 
 export async function listDevices(): Promise<{ devices: Array<{ id: string; name: string; created_at: string; last_seen_at: string | null }> }> {

@@ -38,17 +38,6 @@
       </form>
     </section>
 
-    <section id="vault-section" class="card" hidden>
-      <h2 id="vault-title">Unlock vault</h2>
-      <p id="vault-help" class="hint"></p>
-      <form id="vault-form">
-        <label>Vault passphrase <input type="password" id="vault-passphrase" required minlength="12" /></label>
-        <label class="checkbox"><input type="checkbox" id="vault-remember" /> Remember on this device (Windows DPAPI)</label>
-        <button type="submit" id="vault-btn">Unlock</button>
-        <p class="err" id="vault-err"></p>
-      </form>
-    </section>
-
     <!-- MAIN: tabbed UI -->
     <div id="app-shell" hidden>
       <nav class="tabs">
@@ -97,7 +86,6 @@
       <!-- SETTINGS TAB -->
       <section class="tab-pane" data-tab-pane="settings" hidden>
         <h3>Sync</h3>
-        <label class="checkbox"><input type="checkbox" id="convenience-mode" /> Convenience mode -- use login password as vault key (no separate passphrase)</label>
 
         <div class="row spread">
           <span>Sync interval</span>

@@ -55,9 +55,3 @@ export async function getPassword(): Promise<string> {
   if (env) return env;
   return promptSecret('Password: ');
 }
-
-export async function getPassphrase(): Promise<string> {
-  const env = process.env['CLAUDE_SYNC_PASSPHRASE'];
-  if (env) return env;
-  return promptSecret('Vault passphrase: ');
-}
