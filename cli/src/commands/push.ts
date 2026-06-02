@@ -1,14 +1,9 @@
 import { readFile, readdir, stat } from 'node:fs/promises';
 import { join, relative, sep, posix } from 'node:path';
-import { v5 as uuidv5, v7 as uuidv7 } from 'uuid';
+import { v4 as uuidv4, v7 as uuidv7 } from 'uuid';
 import { Api } from '../api.js';
 import { loadConfig, saveConfig, loadManifest, saveManifest, type Manifest } from '../config.js';
 import { blake2b } from '../crypto.js';
-
-// Stable namespace for deterministic versionId derivation: same (fileId, plaintextHash)
-// always yields the same versionId, so a retried PUT after a lost response presents
-// the same id and the server's PK constraint suppresses orphan duplicates.
-const VERSION_ID_NAMESPACE = 'a9d3b1f4-7c1a-4b9e-8a13-1cf8d1a4d5b2';
 
 function toPosix(p: string): string { return p.split(sep).join(posix.sep); }
 
@@ -73,9 +68,10 @@ export async function push(): Promise<void> {
     if (prev && prev.plaintextHashB64 === hashB64) { skipped++; continue; }
 
     const fileId = prev?.fileId ?? uuidv7();
-    // Deterministic versionId: same (fileId, hash) -> same id, so a retry after a
-    // lost response submits the same id and the server's PK constraint dedupes it.
-    const versionId = uuidv5(`${fileId}|${hashB64}`, VERSION_ID_NAMESPACE);
+    // versionId must be a v4 UUID (server requires it). A lost-response retry generates
+    // a fresh id, so it may create a duplicate version of identical content — harmless;
+    // the manifest's per-path hash skips already-pushed files on the next run.
+    const versionId = uuidv4();
 
     try {
       const r = await api.putFileVersion(fileId, versionId, content, rel);
