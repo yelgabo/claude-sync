@@ -7,7 +7,20 @@ export interface DbClient {
 }
 
 export function createPgClient(databaseUrl: string): DbClient {
-  const pool = new pg.Pool({ connectionString: databaseUrl, max: 10 });
+  const pool = new pg.Pool({
+    connectionString: databaseUrl,
+    max: 10,
+    // Reap idle connections so a DB restart / network blip doesn't leave the pool
+    // holding dead sockets that fail the next query.
+    idleTimeoutMillis: 30_000,
+  });
+  // Without an 'error' handler, an error emitted by an *idle* client (e.g. the DB
+  // closed the connection) is thrown as an unhandled 'error' event and crashes the
+  // process. Log and let the pool discard the client instead.
+  pool.on('error', (err) => {
+    // eslint-disable-next-line no-console
+    console.error('[pg] idle client error:', err.message);
+  });
   return wrapPool(pool);
 }
 

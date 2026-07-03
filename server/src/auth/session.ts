@@ -1,4 +1,5 @@
 ﻿import { v4 as uuidv4 } from 'uuid';
+import { randomBytes, createHash } from 'node:crypto';
 import type { DbClient } from '../db/client.js';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { ApiError } from '../lib/errors.js';
@@ -14,8 +15,14 @@ export interface SessionRow {
   revoked_at: Date | null;
 }
 
-export function newSessionId(): string {
-  return uuidv4();
+// The cookie carries this high-entropy random token; the DB only ever stores its
+// SHA-256 hash. 32 random bytes (256 bits) is well above session-guessing concerns.
+export function newSessionToken(): string {
+  return randomBytes(32).toString('base64url');
+}
+
+export function hashSessionToken(token: string): string {
+  return createHash('sha256').update(token).digest('hex');
 }
 
 export async function createSession(
@@ -23,20 +30,23 @@ export async function createSession(
   userId: string,
   deviceId: string | null = null,
 ): Promise<string> {
-  const id = newSessionId();
+  const id = uuidv4();                 // internal PK, never leaves the server
+  const token = newSessionToken();     // goes into the cookie
+  const tokenHash = hashSessionToken(token);
   const expires = new Date(Date.now() + SESSION_TTL_DAYS * 24 * 60 * 60 * 1000);
   await db.query(
-    `INSERT INTO sessions (id, user_id, device_id, expires_at) VALUES ($1, $2, $3, $4)`,
-    [id, userId, deviceId, expires],
+    `INSERT INTO sessions (id, user_id, device_id, expires_at, token_hash) VALUES ($1, $2, $3, $4, $5)`,
+    [id, userId, deviceId, expires, tokenHash],
   );
-  return id;
+  return token;
 }
 
-export async function loadActiveSession(db: DbClient, id: string): Promise<SessionRow | null> {
+export async function loadActiveSession(db: DbClient, token: string): Promise<SessionRow | null> {
+  const tokenHash = hashSessionToken(token);
   const r = await db.query<SessionRow>(
     `SELECT id, user_id, device_id, expires_at, revoked_at FROM sessions
-     WHERE id = $1 AND revoked_at IS NULL AND expires_at > now() LIMIT 1`,
-    [id],
+     WHERE token_hash = $1 AND revoked_at IS NULL AND expires_at > now() LIMIT 1`,
+    [tokenHash],
   );
   return r.rows[0] ?? null;
 }
@@ -60,8 +70,8 @@ export async function bindSessionDevice(db: DbClient, sessionId: string, deviceI
   await db.query(`UPDATE sessions SET device_id = $1 WHERE id = $2`, [deviceId, sessionId]);
 }
 
-export function setSessionCookie(reply: FastifyReply, sessionId: string): void {
-  reply.setCookie(SESSION_COOKIE, sessionId, {
+export function setSessionCookie(reply: FastifyReply, token: string): void {
+  reply.setCookie(SESSION_COOKIE, token, {
     httpOnly: true, secure: true, sameSite: 'strict', path: '/',
     maxAge: SESSION_TTL_DAYS * 24 * 60 * 60,
   });
@@ -80,13 +90,14 @@ declare module 'fastify' {
 
 export function makeSessionMiddleware(db: DbClient) {
   return async function sessionMiddleware(req: FastifyRequest): Promise<void> {
-    const id = req.cookies[SESSION_COOKIE];
-    if (!id) throw new ApiError('unauthorized', 'no session');
-    const session = await loadActiveSession(db, id);
+    const token = req.cookies[SESSION_COOKIE];
+    if (!token) throw new ApiError('unauthorized', 'no session');
+    const session = await loadActiveSession(db, token);
     if (!session) throw new ApiError('unauthorized', 'session invalid');
     req.user = { id: session.user_id };
     req.session = session;
-    await bumpLastSeen(db, id);
+    // Bump by the internal PK, not the cookie token (which is no longer the PK).
+    await bumpLastSeen(db, session.id);
   };
 }
 

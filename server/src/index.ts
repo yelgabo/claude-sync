@@ -54,12 +54,15 @@ export async function buildApp(opts: BuildOpts = {}): Promise<{ app: FastifyInst
     return reply.code(500).send({ error: { code: 'internal', message: 'internal error' } });
   });
 
-  app.get('/healthz', async () => {
+  app.get('/healthz', async (req, reply) => {
     try {
       await db!.query('SELECT 1');
       return { ok: true, db: 'up' };
-    } catch {
-      return { ok: false, db: 'down' };
+    } catch (err) {
+      // Return 503 (not 200) when the DB is unreachable so load balancers / uptime
+      // checks actually treat the instance as unhealthy and stop routing to it.
+      req.log.error({ err }, 'healthz db check failed');
+      return reply.code(503).send({ ok: false, db: 'down' });
     }
   });
 
