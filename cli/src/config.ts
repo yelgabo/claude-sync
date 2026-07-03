@@ -1,6 +1,22 @@
 import { homedir } from 'node:os';
 import { join, dirname } from 'node:path';
-import { readFile, writeFile, mkdir } from 'node:fs/promises';
+import { readFile, writeFile, mkdir, chmod } from 'node:fs/promises';
+
+// The config file holds the session cookie; the manifest holds sync metadata.
+// Both live under ~/.claude-sync, which must not be world-readable.
+const DIR_MODE = 0o700;
+const FILE_MODE = 0o600;
+
+// Write a file with restrictive permissions. `mkdir`/`writeFile` mode options only
+// apply on creation, so we chmod afterwards to also tighten a pre-existing dir/file
+// that may have been created world-readable by an older build.
+async function writeSecure(path: string, data: string): Promise<void> {
+  const dir = dirname(path);
+  await mkdir(dir, { recursive: true, mode: DIR_MODE });
+  try { await chmod(dir, DIR_MODE); } catch { /* best-effort on platforms without POSIX perms */ }
+  await writeFile(path, data, { encoding: 'utf8', mode: FILE_MODE });
+  try { await chmod(path, FILE_MODE); } catch { /* best-effort */ }
+}
 
 export interface Config {
   serverUrl: string;
@@ -53,8 +69,7 @@ export async function loadConfig(): Promise<Config> {
 }
 
 export async function saveConfig(c: Config): Promise<void> {
-  await mkdir(dirname(CONFIG_PATH), { recursive: true });
-  await writeFile(CONFIG_PATH, JSON.stringify(c, null, 2), 'utf8');
+  await writeSecure(CONFIG_PATH, JSON.stringify(c, null, 2));
 }
 
 export interface ManifestEntry {
@@ -77,6 +92,5 @@ export async function loadManifest(): Promise<Manifest> {
 }
 
 export async function saveManifest(m: Manifest): Promise<void> {
-  await mkdir(dirname(MANIFEST_PATH), { recursive: true });
-  await writeFile(MANIFEST_PATH, JSON.stringify(m, null, 2), 'utf8');
+  await writeSecure(MANIFEST_PATH, JSON.stringify(m, null, 2));
 }

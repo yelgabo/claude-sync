@@ -17,7 +17,15 @@ export function registerSecurityHeaders(app: FastifyInstance): void {
     return payload;
   });
   app.addHook('preHandler', async (req) => {
-    if (!req.url.startsWith('/api/')) return;
+    // CSRF defense: the session cookie is SameSite=strict, but require a custom header
+    // that a cross-site <form>/simple request cannot set as defense-in-depth. Cover
+    // BOTH /api/ mutations and state-changing /auth/* POSTs (login, signup, logout,
+    // password reset request/confirm). GET flows (e.g. /auth/github OAuth redirects)
+    // are non-mutating and intentionally exempt. The CLI, web, and reset-page clients
+    // already send `X-Requested-With: claude-sync` on every mutating request.
+    const path = req.url.split('?', 1)[0] ?? req.url;
+    const guarded = path.startsWith('/api/') || path.startsWith('/auth/');
+    if (!guarded) return;
     if (!MUTATING.has(req.method)) return;
     const xrw = req.headers['x-requested-with'];
     if (xrw !== 'claude-sync') throw new ApiError('invalid_request', 'missing X-Requested-With');

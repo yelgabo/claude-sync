@@ -1,9 +1,10 @@
 import { writeFile, mkdir, unlink, readFile, rename } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
-import { join, dirname } from 'node:path';
+import { dirname } from 'node:path';
 import { Api } from '../api.js';
 import { loadConfig, saveConfig, loadManifest, saveManifest } from '../config.js';
 import { blake2b } from '../crypto.js';
+import { resolveWithinRoot } from '../path-canon.js';
 
 export async function pull(): Promise<void> {
   const config = await loadConfig();
@@ -26,7 +27,17 @@ export async function pull(): Promise<void> {
 
     for (const c of latestByFile.values()) {
       if (!c.path) continue;
-      const abs = join(config.syncRoot, c.path);
+      // SECURITY: c.path is server-controlled and is NOT bound by any integrity check,
+      // so a malicious server could send a traversal path. Re-canonicalize and confirm
+      // the resolved target stays within syncRoot before ANY filesystem op. Reject &
+      // skip (do not advance the cursor) so a poisoned entry can't be silently "applied".
+      let abs: string;
+      try {
+        abs = resolveWithinRoot(config.syncRoot, c.path);
+      } catch (err) {
+        console.error(`! skip ${c.path}: ${(err as Error).message}`);
+        continue;
+      }
 
       if (c.deleted) {
         let applied = true;

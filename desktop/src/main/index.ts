@@ -4,7 +4,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 import { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain, safeStorage, shell, Notification } from 'electron';
 import pkg from 'electron-updater';
 const { autoUpdater } = pkg;
-import { join } from 'node:path';
+import { join, isAbsolute } from 'node:path';
 import { hostname } from 'node:os';
 import {
   Api, loadConfig, saveConfig, push as cliPush, pull as cliPull,
@@ -203,12 +203,68 @@ ipcMain.handle('settings:get', async () => {
   };
 });
 
-ipcMain.handle('settings:set', async (_e, args: { syncRoot?: string; includePrefixes?: string[]; excludePrefixes?: string[]; serverUrl?: string }) => {
+// Whitelist + validate every field the renderer may set. The renderer is a distinct
+// trust boundary: a compromised/hostile renderer must NOT be able to write arbitrary
+// config keys, and must not be able to silently repoint `serverUrl` at an attacker to
+// exfiltrate the session cookie (which the Api attaches to whatever serverUrl is set).
+function isStringArray(v: unknown): v is string[] {
+  return Array.isArray(v) && v.every((x) => typeof x === 'string');
+}
+
+function originOf(url: string): string {
+  return new URL(url).origin; // throws on invalid URL
+}
+
+ipcMain.handle('settings:set', async (_e, args: unknown) => {
+  if (typeof args !== 'object' || args === null) throw new Error('invalid settings payload');
+  const a = args as Record<string, unknown>;
+  // Reject any key that is not explicitly settable.
+  const ALLOWED = new Set(['syncRoot', 'includePrefixes', 'excludePrefixes', 'serverUrl']);
+  for (const k of Object.keys(a)) {
+    if (!ALLOWED.has(k)) throw new Error(`unknown setting: ${k}`);
+  }
+
   const cfg = await loadConfig();
-  if (args.syncRoot !== undefined) cfg.syncRoot = args.syncRoot;
-  if (args.includePrefixes !== undefined) cfg.includePrefixes = args.includePrefixes;
-  if (args.excludePrefixes !== undefined) cfg.excludePrefixes = args.excludePrefixes;
-  if (args.serverUrl !== undefined) cfg.serverUrl = args.serverUrl;
+
+  if (a.syncRoot !== undefined) {
+    if (typeof a.syncRoot !== 'string' || a.syncRoot.length === 0 || !isAbsolute(a.syncRoot)) {
+      throw new Error('syncRoot must be an absolute path');
+    }
+    cfg.syncRoot = a.syncRoot;
+  }
+  if (a.includePrefixes !== undefined) {
+    if (!isStringArray(a.includePrefixes)) throw new Error('includePrefixes must be string[]');
+    cfg.includePrefixes = a.includePrefixes;
+  }
+  if (a.excludePrefixes !== undefined) {
+    if (!isStringArray(a.excludePrefixes)) throw new Error('excludePrefixes must be string[]');
+    cfg.excludePrefixes = a.excludePrefixes;
+  }
+  if (a.serverUrl !== undefined) {
+    if (typeof a.serverUrl !== 'string') throw new Error('serverUrl must be a string');
+    let newOrigin: string;
+    try { newOrigin = originOf(a.serverUrl); }
+    catch { throw new Error('serverUrl must be a valid URL'); }
+    // Require HTTPS (except explicit localhost for dev) so the cookie is never sent in clear.
+    const u = new URL(a.serverUrl);
+    const isLocal = u.hostname === 'localhost' || u.hostname === '127.0.0.1';
+    if (u.protocol !== 'https:' && !isLocal) throw new Error('serverUrl must use https');
+
+    let curOrigin: string | null = null;
+    try { curOrigin = originOf(cfg.serverUrl); } catch { curOrigin = null; }
+
+    // Pin the session cookie to the origin it was issued for: if the origin changes
+    // while a session exists, drop the session/device so the cookie is never replayed
+    // to a different (possibly attacker-controlled) server.
+    if (cfg.session && curOrigin !== null && newOrigin !== curOrigin) {
+      delete cfg.session;
+      delete cfg.userId;
+      delete cfg.deviceId;
+      stopSyncLoop();
+    }
+    cfg.serverUrl = a.serverUrl;
+  }
+
   await saveConfig(cfg);
   return { ok: true };
 });
