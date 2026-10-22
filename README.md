@@ -1,5 +1,9 @@
 # Claude Sync
 
+> **Sunset (2026-10-21):** Claude Sync is no longer running. The sync server is offline, so the
+> desktop app, CLI and web app can no longer sign in or sync. Your local `.claude/` folder is
+> untouched. This repository is archived and kept for reference only.
+
 **Get the same Claude on every computer.**
 
 If you use Claude Code on more than one machine — say a desktop and a laptop — you've probably noticed something annoying: a skill you wrote on one computer isn't on the other. Same with custom commands, agents, and Claude's memory of past conversations. They live on whichever device you set them up on, and they stay there.
